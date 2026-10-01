@@ -1,0 +1,55 @@
+# ESP-IDF / CMake build outputs and fetched components
+/build*/
+/cmake-build-*/
+/managed_components/
+/sdkconfig.old
+compile_commands.json
+CMakeUserPresets.json
+
+# Local downloads, hardware captures, original flash backups and releases
+/references/
+/backups/
+/release/
+/docs/screenshots/
+*.log
+*.ppm
+*.bin
+*.elf
+*.map
+*.o
+*.a
+
+# Toolchains, package installations, virtual environments and caches
+/esp-idf/
+/.espressif/
+/tools/font-env/
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+
+# Font originals can be restored using fonts/SOURCE.json; keep generated C subsets
+/fonts/*.ttf
+/fonts/*.otf
+
+# Local credentials / machine configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/.aws/
+/.codex/
+/.idea/
+/.vscode/
+
+# OS and editor temporary files
+.DS_Store
+._*
+Thumbs.db
+*.swp
+*.swo
+*~

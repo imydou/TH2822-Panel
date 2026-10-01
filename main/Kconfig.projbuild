@@ -1,0 +1,8 @@
+menu "TH2822 panel"
+config PANEL_ROTATE_180
+    bool "Rotate display and touch by 180 degrees"
+    default n
+config PANEL_USB_HOST_ENABLED
+    bool "Enable native USB host (verify VBUS wiring first)"
+    default y
+endmenu
