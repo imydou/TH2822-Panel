@@ -1,4 +1,5 @@
 #include "meter.hpp"
+#include "traffic.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -120,6 +121,20 @@ bool parse_fetch(const std::string &s, bool dcr, Reading &r) {
     r = t;
     return true;
 }
+bool parse_tolerance_range(const std::string &raw, int &percent) {
+    const auto s = upper(trim(raw));
+    if (s == "----") {
+        percent = 0;
+        return true;
+    }
+    const int values[] = {1, 5, 10, 20};
+    for (int i = 0; i < 4; ++i)
+        if (s == "BIN" + std::to_string(i + 1)) {
+            percent = values[i];
+            return true;
+        }
+    return false;
+}
 bool parse_frequency(const std::string &raw, int &hz) {
     auto s = upper(trim(raw));
     double scale = 1;
@@ -205,46 +220,85 @@ bool Framer::feed(uint8_t c, std::string &line) {
     pending.push_back((char)c);
     return false;
 }
-void Stats::add(Value v) {
-    if (v.status != Value::Valid)
-        return;
-    if (!count) {
-        min = max = mean = v.number;
-        count = 1;
-        return;
-    }
-    min = std::min(min, v.number);
-    max = std::max(max, v.number);
-    ++count;
-    mean += (v.number - mean) / (double)count;
+bool parse_recording(const std::string &s, Reading &r) {
+    r = {};
+    const auto fields = split(s);
+    Reading next;
+    if (fields.size() == 1) {
+        Value empty;
+        if (!parse_value(fields[0], empty) || empty.status != Value::Overrange)
+            return false;
+        next.primary = next.secondary = empty;
+    } else if (fields.size() != 2 || !parse_value(fields[0], next.primary) ||
+               !parse_value(fields[1], next.secondary))
+        return false;
+    r = next;
+    return true;
+}
+ToleranceResult tolerance_result(const State &s) {
+    const auto &t = s.tolerance;
+    if (!s.connected || !s.ready || !t.known)
+        return ToleranceResult::Unknown;
+    if (!t.enabled)
+        return ToleranceResult::Inactive;
+    if (s.hold)
+        return ToleranceResult::Held;
+    if (!t.percent)
+        return ToleranceResult::NoRange;
+    if ((t.percent != 1 && t.percent != 5 && t.percent != 10 && t.percent != 20) ||
+        t.nominal.status != Value::Valid || !std::isfinite(t.nominal.number) ||
+        t.nominal.number == 0)
+        return ToleranceResult::Invalid;
+    if (t.deviation.status == Value::Overrange)
+        return ToleranceResult::Overrange;
+    if (t.deviation.status != Value::Valid || !std::isfinite(t.deviation.number) ||
+        s.reading.primary.status != Value::Valid)
+        return ToleranceResult::Invalid;
+    return std::abs(t.deviation.number) <= t.percent ? ToleranceResult::Within
+                                                     : ToleranceResult::Outside;
 }
 bool Session::fail(const std::string &why, const std::string &detail) {
+    verified_context = false;
+    traffic_log().add(io.now_ms(), 'E', why + " " + detail);
     state.ready = false;
     state.reading = {};
     state.error = why;
+    state.recording.known = false;
+    state.recording.value = {};
+    state.recording.view = RecordingView::Unknown;
+    state.recording.live = false;
+    state.recording.read_at_ms = 0;
+    ++state.recording.revision;
+    state.tolerance.known = false;
+    state.tolerance.deviation = {};
     state.error_detail = detail;
     return false;
 }
 void Session::disconnect(const std::string &why) {
+    verified_context = false;
+    traffic_log().add(io.now_ms(), 'E', why);
     state.connected = false;
     state.phase = ConnectionPhase::Disconnected;
     state.ready = false;
     state.reading = {};
-    state.stats = {};
     state.hold = false;
     state.error = why;
+    state.tolerance = {};
+    state.recording = {};
+    state.sample_sequence = 0;
 }
 static bool measurement_frame(const std::string &line) {
     Reading value;
     return parse_fetch(line, false, value) || parse_fetch(line, true, value);
 }
-bool Session::query(const std::string &cmd, std::string &out) {
+bool Session::query(const std::string &cmd, std::string &out, bool retry) {
     if (busy)
         return fail("error.reentry");
     busy = true;
     // Both TH2822/A/C and D/E manuals say any command stops Auto Fetch. Send IDN even if a stream
     // already exists; bounded demultiplexing discards preceding measurement frames.
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    for (int attempt = 0; attempt < (retry ? 2 : 1); ++attempt) {
+        traffic_log().add(io.now_ms(), 'T', cmd);
         if (!io.healthy() || !io.write(cmd + "\n")) {
             busy = false;
             return fail("error.write");
@@ -258,19 +312,24 @@ bool Session::query(const std::string &cmd, std::string &out) {
             const unsigned remaining = static_cast<unsigned>(deadline - now);
             if (!io.line(out, remaining))
                 break;
-            if (cmd != "FETCh?" && measurement_frame(out))
+            traffic_log().add(io.now_ms(), 'R', out);
+            if (cmd != "FETCh?" &&
+                !((cmd.rfind("CALC:REC:", 0) == 0 || cmd.rfind("CALCulate:RECording:", 0) == 0) &&
+                  split(out).size() <= 2) &&
+                measurement_frame(out))
                 continue;
             busy = false;
             return true;
         }
         // Only the identical query may retry. Quarantine late replies first.
-        if (!io.healthy() || !io.quiet(1200, 4000))
+        if (!retry || !io.healthy() || !io.quiet(1200, 4000))
             break;
     }
     busy = false;
-    return fail("error.timeout", cmd);
+    return fail(retry ? "error.timeout" : "error.rec_timeout", cmd);
 }
 bool Session::connect() {
+    verified_context = false;
     const auto locale = state.locale;
     state = State{};
     state.locale = locale;
@@ -300,11 +359,15 @@ bool Session::connect() {
     state.connected = true;
     state.phase = ConnectionPhase::Identified;
     // The touch panel owns acquisition: settings resume polling without physical RMT.
-    state.poll_ms = 1000;
+    state.poll_ms = 500;
     settle_ms = (state.model == Model::D && fields[1] == "VER4.5.2307") ? 800 : 1200;
+    // Fast path is scoped to this E firmware; other variants retain their prior timing.
+    fast_readback = state.model == Model::E && fields[1] == "VER4.5.2307";
+    if (fast_readback)
+        settle_ms = 100;
     return refresh();
 }
-bool Session::refresh() {
+bool Session::refresh(bool full) {
     std::string s;
     if (!query("FUNC:IMPA?", s))
         return false;
@@ -313,6 +376,7 @@ bool Session::refresh() {
         return fail("error.primary", "FUNC:IMPA? => [" + s + "]");
     if (s == "DCR" && !profile(state.model).dcr)
         return fail("error.dcr_profile");
+    const bool read_settings = full || state.primary != s;
     state.primary = s;
     if (s == "DCR") {
         state.secondary = "NULL";
@@ -326,69 +390,227 @@ bool Session::refresh() {
         if (s != "D" && s != "Q" && s != "THETA" && s != "ESR" && s != "NULL")
             return fail("error.secondary", "FUNC:IMPB? => [" + s + "]");
         state.secondary = s;
-        if (!query("FUNC:EQU?", s))
-            return false;
-        s = upper(trim(s));
-        if (s != "SER" && s != "PAL")
-            return fail("error.equivalent", "FUNC:EQU? => [" + s + "]");
-        state.equivalent = s;
-        if (!query("FREQ?", s))
-            return false;
-        if (!parse_frequency(s, state.hz) || !valid_frequency(state.model, state.hz))
-            return fail("error.frequency", "FREQ? => [" + s + "]");
-        if (profile(state.model).selectable_level) {
-            if (!query("VOLT?", s))
+        if (read_settings) {
+            if (!query("FUNC:EQU?", s))
                 return false;
-            if (!parse_level(s, state.level))
-                return fail("error.level", "VOLT? => [" + s + "]");
-        } else
-            state.level = 0.6; // fixed hardware level from A/C datasheet, not a queried readback
+            s = upper(trim(s));
+            if (s != "SER" && s != "PAL")
+                return fail("error.equivalent", "FUNC:EQU? => [" + s + "]");
+            state.equivalent = s;
+            if (!query("FREQ?", s))
+                return false;
+            if (!parse_frequency(s, state.hz) || !valid_frequency(state.model, state.hz))
+                return fail("error.frequency", "FREQ? => [" + s + "]");
+            if (profile(state.model).selectable_level) {
+                if (!query("VOLT?", s))
+                    return false;
+                if (!parse_level(s, state.level))
+                    return fail("error.level", "VOLT? => [" + s + "]");
+            } else
+                state.level =
+                    0.6; // fixed hardware level from A/C datasheet, not a queried readback
+        }
     }
+    if (state.tolerance.monitored && !refresh_tolerance(read_settings))
+        return false;
+    if (state.recording.monitored && !refresh_recording())
+        return false;
     state.ready = true;
     state.error = "";
     state.error_detail.clear();
     return true;
 }
+bool Session::refresh_tolerance(bool full) {
+    state.tolerance.monitored = true;
+    Tolerance next = state.tolerance;
+    next.monitored = true;
+    std::string response;
+    if (!query("CALC:TOL:STAT?", response))
+        return false;
+    const auto status = upper(trim(response));
+    if (status != "ON" && status != "OFF")
+        return fail("error.tolerance", "STAT? => [" + response + "]");
+    next.known = true;
+    next.enabled = status == "ON";
+    if (next.enabled && (full || !state.tolerance.known || !state.tolerance.enabled)) {
+        if (!query("CALC:TOL:RANG?", response))
+            return false;
+        if (!parse_tolerance_range(response, next.percent))
+            return fail("error.tolerance", "RANG? => [" + response + "]");
+        if (!query("CALC:TOL:NOM?", response))
+            return false;
+        if (!parse_value(response, next.nominal))
+            return fail("error.tolerance", "NOM? => [" + response + "]");
+    }
+    if (!next.enabled) {
+        next.percent = 0;
+        next.nominal = {};
+        next.deviation = {};
+    }
+    const auto &old = state.tolerance;
+    if (old.known && old.enabled == next.enabled && old.percent == next.percent &&
+        old.nominal.status == next.nominal.status && old.nominal.number == next.nominal.number)
+        next.deviation = old.deviation;
+    else {
+        state.hold = false;
+        state.reading = {};
+    }
+    state.tolerance = next;
+    return true;
+}
+bool Session::refresh_recording() {
+    auto &rec = state.recording;
+    rec.monitored = true;
+    std::string response;
+    if (!query("CALC:REC:STAT?", response))
+        return false;
+    const auto status = upper(trim(response));
+    if (status != "ON" && status != "OFF")
+        return fail("error.recording", "STAT? => [" + response + "]");
+    const bool enabled = status == "ON";
+    if (!rec.known || rec.enabled != enabled) {
+        rec.view = RecordingView::Unknown;
+        rec.value = {};
+        rec.live = false;
+        rec.read_at_ms = 0;
+        ++rec.revision;
+        state.reading = {};
+        state.hold = false;
+    }
+    rec.known = true;
+    rec.enabled = enabled;
+    return true;
+}
+bool Session::select_recording(RecordingView target, bool force) {
+    auto &rec = state.recording;
+    if (!rec.known || !rec.enabled || target == RecordingView::Unknown)
+        return false;
+    if (!force && rec.view == target)
+        return true;
+    const char *command = target == RecordingView::Present   ? "CALCulate:RECording:PRESent?"
+                          : target == RecordingView::Maximum ? "CALCulate:RECording:MAXimum?"
+                          : target == RecordingView::Average ? "CALCulate:RECording:AVERage?"
+                                                             : "CALCulate:RECording:MINimum?";
+    rec.view = RecordingView::Unknown;
+    rec.value = {};
+    rec.live = false;
+    rec.read_at_ms = 0;
+    state.reading = {};
+    state.hold = false;
+    std::string response;
+    // These queries switch the instrument display and beep, even when already selected.
+    // Never retry automatically, rotate them in the background, or restart REC.
+    if (!query(command, response, false))
+        return false;
+    Reading value;
+    if (!parse_recording(response, value))
+        return fail("error.recording", std::string(command) + " => [" + response + "]");
+    rec.view = target;
+    rec.live = target == RecordingView::Present && state.model == Model::E &&
+               state.firmware == "VER4.5.2307";
+    if (rec.live) {
+        // PRES returns ----- on this E, but selects current recording display. The direct
+        // test verified FETCH after a 1.2 s gap; retain that gap only when entering Current.
+        rec.value = {};
+        io.delay(1200);
+    } else {
+        rec.value = value;
+        if (state.primary == "DCR" || state.secondary == "NULL")
+            rec.value.secondary = {};
+        rec.read_at_ms = io.now_ms();
+    }
+    ++rec.revision;
+    return true;
+}
 bool Session::set(const std::string &command, const std::string &readback,
                   const std::string &expect) {
+    if (readback == "FUNC:IMPA?" || readback == "FUNC:IMPB?" || readback == "FREQ?" ||
+        readback == "VOLT?") {
+        if (!refresh_tolerance(false))
+            return false;
+        if (state.tolerance.enabled) {
+            state.error = "error.tol_locked";
+            state.error_detail.clear();
+            traffic_log().add(io.now_ms(), 'E', state.error);
+            return false;
+        }
+    }
+    if (state.recording.monitored && command.rfind("CALC:", 0) != 0) {
+        if (!refresh_recording())
+            return false;
+        if (state.recording.enabled) {
+            state.error = "error.rec_locked";
+            state.error_detail.clear();
+            return false;
+        }
+    }
     state.ready = false;
     state.reading = {};
-    state.stats = {};
     state.hold = false;
+    state.tolerance.deviation = {};
+    traffic_log().add(io.now_ms(), 'T', command);
     if (!io.healthy() || !io.write(command + "\n"))
         return fail("error.setting");
     io.delay(settle_ms);
     std::string got;
-    if (!query(readback, got))
-        return false;
-    bool match = upper(trim(got)) == expect;
-    if (readback == "FREQ?") {
-        int hz = 0;
-        match = parse_frequency(got, hz) && std::to_string(hz) == expect;
-    }
-    if (readback == "VOLT?") {
-        double v = 0;
-        match = parse_level(got, v) && std::abs(v - std::strtod(expect.c_str(), nullptr)) < 1e-6;
+    bool match = false;
+    // Only readback queries repeat. A setting (especially TOL ON) is never resent.
+    // Queries remain serial, so delayed responses cannot spill into a different command.
+    for (unsigned attempt = 0; attempt < (fast_readback ? 4u : 1u); ++attempt) {
+        if (attempt)
+            io.delay(100u << (attempt - 1));
+        if (!query(readback, got))
+            return false;
+        match = upper(trim(got)) == expect;
+        if (readback == "FREQ?") {
+            int hz = 0;
+            match = parse_frequency(got, hz) && std::to_string(hz) == expect;
+        }
+        if (readback == "VOLT?") {
+            double v = 0;
+            match =
+                parse_level(got, v) && std::abs(v - std::strtod(expect.c_str(), nullptr)) < 1e-6;
+        }
+        if (readback == "CALC:TOL:RANG?") {
+            int percent = 0;
+            match = parse_tolerance_range(got, percent) && std::to_string(percent) == expect;
+        }
+        if (match)
+            break;
     }
     if (!match)
         return fail("error.readback", got + " / " + expect);
-    // Re-read entire context, including secondary, after any setter. Never label data using
-    // requested settings.
-    return refresh();
+    // Apply only verified readback values. Do not query unrelated display settings after
+    // changing level/equivalent/TOL; retain explicit full sync for externally changed settings.
+    if (readback == "FREQ?")
+        parse_frequency(got, state.hz);
+    if (readback == "VOLT?")
+        parse_level(got, state.level);
+    if (readback == "FUNC:EQU?")
+        state.equivalent = upper(trim(got));
+    if (readback == "CALC:TOL:RANG?")
+        parse_tolerance_range(got, state.tolerance.percent);
+    // Keep the full post-setting verification, but let the immediately following sample
+    // reuse it once instead of sending all the same metadata queries again.
+    if (!refresh(false))
+        return false;
+    verified_context = true;
+    verified_context_at = io.now_ms();
+    return true;
 }
 bool Session::apply(const Action &a) {
+    verified_context = false;
     if (a.type == ActionType::Hold) {
         state.hold = !state.hold;
         return true;
     }
-    if (a.type == ActionType::ClearStats) {
-        state.stats = {};
-        return true;
-    }
+    if (a.type == ActionType::ReservedLocalStats)
+        return false;
     if (a.type == ActionType::PollInterval) {
         if (!state.connected || !state.ready)
             return false;
-        if (a.value != "250" && a.value != "500" && a.value != "1000")
+        if (a.value != "250" && a.value != "333" && a.value != "500" && a.value != "667" &&
+            a.value != "1000")
             return false;
         state.poll_ms = static_cast<unsigned>(std::strtoul(a.value.c_str(), nullptr, 10));
         return true; // Local scheduling only; no instrument command or statistics reset.
@@ -397,13 +619,97 @@ bool Session::apply(const Action &a) {
         if (!state.connected)
             return false;
         state.reading = {};
-        state.stats = {};
         state.hold = false;
         return refresh();
     }
     if (!state.ready || !profile(state.model).max_hz) {
         state.error = "error.locked";
         return false;
+    }
+    if (a.type == ActionType::RecordingInspect) {
+        if (!refresh_recording())
+            return false;
+        return !state.recording.enabled || state.recording.view != RecordingView::Unknown ||
+               select_recording(RecordingView::Present);
+    }
+    if (a.type == ActionType::RecordingSelect || a.type == ActionType::RecordingUpdate) {
+        if (!refresh_recording())
+            return false;
+        auto target = a.value == "present" ? RecordingView::Present
+                      : a.value == "max"   ? RecordingView::Maximum
+                      : a.value == "avg"   ? RecordingView::Average
+                      : a.value == "min"   ? RecordingView::Minimum
+                                           : RecordingView::Unknown;
+        if (a.type == ActionType::RecordingUpdate)
+            target = state.recording.view;
+        // Live Current already updates with FETCH; an update must not re-send PRES.
+        if (a.type == ActionType::RecordingUpdate && state.recording.live)
+            return true;
+        return select_recording(target, a.type == ActionType::RecordingUpdate);
+    }
+    if (a.type == ActionType::RecordingEnable || a.type == ActionType::RecordingDisable) {
+        if (!refresh_recording())
+            return false;
+        const bool enabled = a.type == ActionType::RecordingEnable;
+        if (state.recording.enabled == enabled)
+            return true;
+        if (enabled) {
+            if (!refresh_tolerance(false))
+                return false;
+            if (state.tolerance.enabled) {
+                state.error = "error.tol_locked";
+                state.error_detail.clear();
+                return false;
+            }
+        }
+        if (!set(std::string("CALC:REC:STAT ") + (enabled ? "ON" : "OFF"), "CALC:REC:STAT?",
+                 enabled ? "ON" : "OFF"))
+            return false;
+        return !enabled || select_recording(RecordingView::Present);
+    }
+    if (a.type == ActionType::ToleranceInspect)
+        return refresh_tolerance();
+    if (a.type == ActionType::ToleranceEnable || a.type == ActionType::ToleranceDisable ||
+        a.type == ActionType::ToleranceCapture || a.type == ActionType::ToleranceRange) {
+        if (!refresh_tolerance(false))
+            return false;
+        if (a.type == ActionType::ToleranceRange) {
+            if (!state.tolerance.enabled ||
+                (a.value != "1" && a.value != "5" && a.value != "10" && a.value != "20"))
+                return false;
+            if (std::to_string(state.tolerance.percent) == a.value)
+                return true;
+            return set("CALC:TOL:RANG " + a.value, "CALC:TOL:RANG?", a.value);
+        }
+        const bool enable = a.type != ActionType::ToleranceDisable;
+        if (enable && state.recording.monitored) {
+            if (!refresh_recording())
+                return false;
+            if (state.recording.enabled) {
+                state.error = "error.rec_locked";
+                state.error_detail.clear();
+                return false;
+            }
+        }
+        if (a.type != ActionType::ToleranceCapture && state.tolerance.enabled == enable)
+            return true;
+        if (enable && (state.hold || state.reading.primary.status != Value::Valid ||
+                       state.reading.primary.number == 0)) {
+            state.error = "error.tol_reference";
+            state.error_detail.clear();
+            return false;
+        }
+        const int previous_range = state.tolerance.percent;
+        // A deliberate recapture toggles native TOL. Never automatically repeat an ON write.
+        if (enable && state.tolerance.enabled && !set("CALC:TOL:STAT OFF", "CALC:TOL:STAT?", "OFF"))
+            return false;
+        if (!set(std::string("CALC:TOL:STAT ") + (enable ? "ON" : "OFF"), "CALC:TOL:STAT?",
+                 enable ? "ON" : "OFF"))
+            return false;
+        if (a.type == ActionType::ToleranceCapture && previous_range)
+            return set("CALC:TOL:RANG " + std::to_string(previous_range), "CALC:TOL:RANG?",
+                       std::to_string(previous_range));
+        return true;
     }
     if (a.type == ActionType::Primary) {
         if (a.value != "L" && a.value != "C" && a.value != "R" && a.value != "Z" &&
@@ -440,28 +746,65 @@ bool Session::apply(const Action &a) {
     }
     return false;
 }
-bool Session::poll() {
+bool Session::poll(bool use_verified_context, bool (*action_waiting)()) {
     if (!state.ready)
         return false;
+    if (action_waiting && action_waiting())
+        return true;
     const State before = state;
-    if (!refresh())
+    const bool reuse =
+        use_verified_context && verified_context && io.now_ms() - verified_context_at <= 250;
+    verified_context = false;
+    if (!reuse && !refresh(false))
         return false;
     if (before.primary != state.primary || before.secondary != state.secondary ||
         before.equivalent != state.equivalent || before.hz != state.hz ||
         before.level != state.level) {
-        state.stats = {};
         state.reading = {};
         state.hold = false;
+        state.tolerance.deviation = {};
     }
+    // A queued setting may run before FETCH once metadata replies have all been consumed.
+    if (action_waiting && action_waiting())
+        return true;
     std::string s;
-    if (!query("FETCh?", s))
-        return false;
     Reading r;
-    if (!parse_fetch(s, state.primary == "DCR", r))
-        return fail("error.measurement", s);
+    if (state.recording.known && state.recording.enabled) {
+        auto &rec = state.recording;
+        if (rec.view == RecordingView::Unknown && !select_recording(RecordingView::Present))
+            return false;
+        if (!rec.live) {
+            state.reading = {}; // A statistical snapshot must never masquerade as live data.
+            return true;        // Only harmless status queries while viewing a snapshot.
+        }
+        if (!query("FETCh?", s))
+            return false;
+        if (!parse_fetch(s, state.primary == "DCR", r))
+            return fail("error.measurement", s);
+        if (state.secondary == "NULL")
+            r.secondary = {};
+        rec.value = r;
+        rec.read_at_ms = io.now_ms();
+        ++rec.revision;
+    } else {
+        if (!query("FETCh?", s))
+            return false;
+        if (!parse_fetch(s, state.primary == "DCR", r))
+            return fail("error.measurement", s);
+    }
+    // Do not start another query when a setting arrived during the completed FETCH.
+    if (action_waiting && action_waiting())
+        return true;
+    Value deviation;
+    if (state.tolerance.enabled && state.tolerance.known) {
+        if (!query("CALC:TOL:VALU?", s))
+            return false;
+        if (!parse_value(s, deviation))
+            return fail("error.tolerance", "VALU? => [" + s + "]");
+    }
     if (!state.hold) {
+        state.tolerance.deviation = deviation;
         state.reading = r;
-        state.stats.add(r.primary);
         ++state.sample_sequence;
     }
     return true;

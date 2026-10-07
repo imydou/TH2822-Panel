@@ -1,4 +1,4 @@
 cmake_minimum_required(VERSION 3.16)
-set(PROJECT_VER "0.3.4")
+set(PROJECT_VER "0.4.9")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(th2822_panel)

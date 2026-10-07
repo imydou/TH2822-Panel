@@ -1,6 +1,8 @@
 #include "display_geometry.h"
 #include "fixtures/instrument_fixture.hpp"
 #include "meter.hpp"
+#include "traffic.hpp"
+#include <algorithm>
 #include <cassert>
 #include <deque>
 #include <iostream>
@@ -37,6 +39,7 @@ struct Fake : Transport {
     }
     void delay(unsigned t) override {
         delays.push_back(t);
+        clock += t;
     }
 };
 static void connected(Fake &f, Session &s, const std::string &model = "TH2822D",
@@ -52,15 +55,30 @@ static void poll_answers(Fake &f, const Session &s, std::initializer_list<std::s
     f.answers = {s.state.primary};
     if (s.state.primary != "DCR") {
         f.answers.push_back(s.state.secondary);
-        f.answers.push_back(s.state.equivalent);
-        f.answers.push_back(std::to_string(s.state.hz));
-        if (profile(s.state.model).selectable_level)
-            f.answers.push_back(std::to_string(s.state.level));
     }
+    if (s.state.tolerance.monitored)
+        f.answers.push_back("OFF");
     for (auto &r : readings)
         f.answers.push_back(r);
 }
+static unsigned yield_checks = 0, yield_at = 0;
+static bool waiting_action() {
+    return ++yield_checks >= yield_at;
+}
 int main() {
+    { // Bound RAM history, preserve ordering and neutralize LVGL recolor syntax.
+        TrafficLog log;
+        for (unsigned i = 0; i < 180; ++i)
+            log.add(i, 'T', "FETCh?");
+        auto entries = log.snapshot();
+        assert(entries.size() == 80 && entries.front().sequence == 101 &&
+               entries.back().sequence == 180);
+        log.add(181, 'E', std::string(300, '#') + "\nignored");
+        entries = log.snapshot();
+        assert(entries.back().text[191] == 0 &&
+               std::string(entries.back().text.data()).size() == 191);
+        assert(std::string(entries.back().text.data()).find('#') == std::string::npos);
+    }
     uint16_t pixels[] = {1, 2, 3, 4, 5, 6};
     panel_rotate_180(pixels, 6);
     for (unsigned i = 0; i < 6; ++i)
@@ -119,11 +137,80 @@ int main() {
     fr.reset();
     fr.feed(0, out);
     assert(fr.failed());
-    Stats stat;
-    stat.add({Value::Valid, 1});
-    stat.add({Value::Overrange, 0});
-    stat.add({Value::Valid, 3});
-    assert(stat.count == 2 && stat.mean == 2 && stat.min == 1 && stat.max == 3);
+    { // First sample after a verified setting skips duplicate context queries, once only.
+        InstrumentFixture t;
+        t.firmware = "VER4.5.2307";
+        Session s(t);
+        assert(s.connect() && s.apply({ActionType::ToleranceInspect, ""}) &&
+               s.apply({ActionType::RecordingInspect, ""}));
+        assert(s.apply({ActionType::Frequency, "100"}));
+        auto n = t.writes.size();
+        assert(s.poll(true));
+        assert(t.writes.size() == n + 1 && t.writes.back() == "FETCh?\n");
+        n = t.writes.size();
+        assert(s.poll(true));
+        assert(t.writes.size() == n + 5); // Ordinary metadata monitoring resumes.
+        assert(s.apply({ActionType::Frequency, "1000"}));
+        t.delay(251);
+        n = t.writes.size();
+        assert(s.poll(true) && t.writes.size() == n + 5); // Never reuse old state.
+        assert(s.apply({ActionType::Equivalent, "PAL"}));
+        yield_checks = 0;
+        yield_at = 2;
+        n = t.writes.size();
+        assert(s.poll(true, waiting_action) && t.writes.size() == n);
+        assert(s.apply({ActionType::Secondary, "Q"})); // Still ready, no in-flight response.
+        assert(s.poll(true) && s.state.secondary == "Q");
+    }
+    { // Yield before FETCH or before the extra TOL query, without fabricating a sample.
+        InstrumentFixture t;
+        Session s(t);
+        assert(s.connect() && s.apply({ActionType::ToleranceInspect, ""}) &&
+               s.apply({ActionType::RecordingInspect, ""}));
+        auto n = t.writes.size();
+        yield_checks = 0;
+        yield_at = 2;
+        assert(s.poll(false, waiting_action));
+        assert(t.writes.size() == n + 4 && s.state.sample_sequence == 0 && s.state.ready);
+        assert(s.poll() && s.state.sample_sequence == 1);
+        assert(s.apply({ActionType::ToleranceEnable, ""}));
+        n = t.writes.size();
+        yield_checks = 0;
+        yield_at = 3;
+        assert(s.poll(false, waiting_action));
+        assert(t.writes.back() == "FETCh?\n" && s.state.sample_sequence == 1);
+        assert(s.poll() && s.state.sample_sequence == 2);
+    }
+    { // E fast readback succeeds without the old fixed 1200 ms idle.
+        Fake f;
+        Session s(f);
+        connected(f, s, "TH2822E");
+        assert(s.state.poll_ms == 500);
+        f.answers = {"OFF", "100Hz", "C", "D", "OFF"};
+        auto start = f.clock;
+        assert(s.apply({ActionType::Frequency, "100"}));
+        assert(f.delays == std::vector<unsigned>{100});
+        assert(f.clock - start < 150);
+    }
+    { // Old value then confirmed value: repeat the same query, never the setter.
+        Fake f;
+        Session s(f);
+        connected(f, s, "TH2822E");
+        f.answers = {"OFF", "1kHz", "1kHz", "100Hz", "C", "D", "OFF"};
+        assert(s.apply({ActionType::Frequency, "100"}));
+        assert((f.delays == std::vector<unsigned>{100, 100, 200}));
+        assert(std::count(f.writes.begin(), f.writes.end(), "FREQ 100\n") == 1);
+    }
+    { // Persistent mismatch is bounded and visible; no false success.
+        Fake f;
+        Session s(f);
+        connected(f, s, "TH2822E");
+        f.answers = {"OFF", "1kHz", "1kHz", "1kHz", "1kHz"};
+        assert(!s.apply({ActionType::Frequency, "100"}));
+        assert(s.state.error == "error.readback" && !s.state.ready);
+        assert(std::count(f.writes.begin(), f.writes.end(), "FREQ?\n") == 5); // Includes connect.
+        assert(std::count(f.writes.begin(), f.writes.end(), "FREQ 100\n") == 1);
+    }
     {
         Fake f;
         Session s(f);
@@ -135,17 +222,17 @@ int main() {
         assert(s.poll());
         assert(f.writes[f.writes.size() - 1] == "FETCh?\n" &&
                f.writes[f.writes.size() - 2] == "FETCh?\n");
-        assert(s.state.stats.count == 1);
+        assert(s.state.sample_sequence == 1);
         s.apply({ActionType::Hold, ""});
         poll_answers(f, s, {"2e-6,0.02,N"});
         assert(s.poll());
-        assert(s.state.reading.primary.number == 1e-6 && s.state.stats.count == 1);
+        assert(s.state.reading.primary.number == 1e-6 && s.state.sample_sequence == 1);
     }
     {
         Fake f;
         Session s(f);
         connected(f, s);
-        f.answers = {"100Hz", "C", "NULL", "SER", "100Hz", "0.6V"};
+        f.answers = {"OFF", "100Hz", "C", "NULL", "OFF"};
         assert(s.apply({ActionType::Frequency, "100"}));
         assert(s.state.secondary == "NULL" && s.state.hz == 100 && f.delays[0] == 800);
     }
@@ -153,7 +240,7 @@ int main() {
         Fake f;
         Session s(f);
         connected(f, s, "TH2822E", "OTHER");
-        f.answers = {"100kHz", "C", "D", "SER", "100kHz", "0.6V"};
+        f.answers = {"OFF", "100kHz", "C", "D", "OFF"};
         assert(s.apply({ActionType::Frequency, "100000"}));
         assert(f.delays[0] == 1200);
     }
@@ -161,7 +248,7 @@ int main() {
         Fake f;
         Session s(f);
         connected(f, s);
-        f.answers = {"120Hz"};
+        f.answers = {"OFF", "120Hz"};
         assert(!s.apply({ActionType::Frequency, "100"}));
         assert(!s.state.ready && s.state.reading.primary.status == Value::Invalid);
         unsigned setters = 0;
@@ -174,7 +261,7 @@ int main() {
         Fake f;
         Session s(f);
         connected(f, s);
-        f.answers = {"DCR", "DCR"};
+        f.answers = {"OFF", "DCR", "DCR", "OFF"};
         assert(s.apply({ActionType::Primary, "DCR"}));
         assert(s.state.secondary == "NULL");
         auto n = f.writes.size();
@@ -209,7 +296,7 @@ int main() {
         assert(!s.poll());
         assert(!s.state.ready);
         s.disconnect("gone");
-        assert(!s.state.connected && s.state.stats.count == 0);
+        assert(!s.state.connected && s.state.sample_sequence == 0);
     }
     {
         Fake f;
@@ -218,7 +305,7 @@ int main() {
         poll_answers(f, s, {"TIMEOUT", "TIMEOUT"});
         auto n = f.writes.size();
         assert(!s.poll());
-        assert(f.writes.size() == n + 7);
+        assert(f.writes.size() == n + 4);
     }
     {
         Fake f;
@@ -276,11 +363,13 @@ int main() {
         assert(s.state.ready && s.state.hz == 100);
         assert(s.state.reading.primary.status == Value::Invalid);
         assert(s.poll() && s.state.reading.primary.status == Value::Valid);
-        assert(s.state.stats.count == 1);
-        assert(s.apply({ActionType::PollInterval, "500"}) && s.state.poll_ms == 500);
+        assert(s.state.sample_sequence == 2);
+        for (const auto *interval : {"250", "333", "500", "667", "1000"})
+            assert(s.apply({ActionType::PollInterval, interval}) &&
+                   s.state.poll_ms == std::stoul(interval));
         assert(!s.apply({ActionType::PollInterval, "auto"}));
         assert(!s.apply({ActionType::PollInterval, "0"}));
-        assert(s.state.stats.count == 1);
+        assert(s.state.sample_sequence == 2);
         s.disconnect("test");
         assert(s.connect());
     }
@@ -290,7 +379,7 @@ int main() {
         Session s(f);
         connected(f, s, "TH2822E");
         f.answers = {"C", "NULL", "SER", "1000", "0."};
-        assert(!s.poll() && !s.state.ready);
+        assert(!s.apply({ActionType::Resync, ""}) && !s.state.ready);
         assert(s.state.error == "error.level");
         assert(s.state.error_detail == "VOLT? => [0.]");
         assert(s.state.reading.primary.status == Value::Invalid);
@@ -305,12 +394,15 @@ int main() {
         if (std::string(field) == "equivalent")
             f.answers.push_back("D");
         f.answers.push_back("TRUNCATED");
-        assert(!s.poll() && !s.state.ready);
+        assert(
+            !(std::string(field) == "equivalent" ? s.apply({ActionType::Resync, ""}) : s.poll()) &&
+            !s.state.ready);
         assert(s.state.error == std::string("error.") + field);
         assert(s.state.error_detail.find("TRUNCATED") != std::string::npos);
     }
     std::cout
         << "PASS: capabilities, strict parsing, framing, overflow, state gating, DCR, readback, "
-           "secondary reset, query retry, setter no-retry, hold/stats, disconnect, identity "
+           "secondary reset, query retry, setter no-retry, hold/native-recording, disconnect, "
+           "identity "
            "gating, stale-frame demux, touch-only setting/poll flow\n";
 }

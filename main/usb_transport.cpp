@@ -5,6 +5,11 @@
 #include "usb/vcp_cp210x.h"
 #include <cstdio>
 static std::atomic<uint32_t> descriptor{0};
+static std::atomic<bool> trace_enabled{false};
+void UsbTransport::set_trace(bool enabled) {
+    trace_enabled = enabled;
+    ESP_LOGI("scpi", "trace=%d", enabled);
+}
 static std::atomic<th::ConnectionPhase> usb_phase{th::ConnectionPhase::Disconnected};
 static void new_device(usb_device_handle_t dev) {
     const usb_device_desc_t *d = nullptr;
@@ -130,6 +135,8 @@ void UsbTransport::delay(unsigned ms) {
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 bool UsbTransport::write(const std::string &s) {
+    if (trace_enabled)
+        ESP_LOGI("scpi", "TX [%.*s]", (int)s.find_first_of("\r\n"), s.c_str());
     return alive && !overflow && device &&
            cdc_acm_host_data_tx_blocking(device, (const uint8_t *)s.data(), s.size(), 1000) ==
                ESP_OK;
@@ -139,8 +146,11 @@ bool UsbTransport::line(std::string &s, unsigned ms) {
     uint8_t c;
     while (alive && !overflow && esp_timer_get_time() < until) {
         if (xQueueReceive(rx, &c, pdMS_TO_TICKS(20)) == pdTRUE) {
-            if (framer.feed(c, s))
+            if (framer.feed(c, s)) {
+                if (trace_enabled)
+                    ESP_LOGI("scpi", "RX [%s]", s.c_str());
                 return true;
+            }
             if (framer.failed()) {
                 overflow = true;
                 return false;

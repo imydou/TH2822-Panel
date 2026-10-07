@@ -17,6 +17,7 @@ using namespace th;
 struct Request {
     ActionType type;
     char value[32];
+    int64_t submitted_ms;
 };
 static QueueHandle_t commands;
 static SemaphoreHandle_t state_lock;
@@ -35,6 +36,7 @@ static void publish(const State &s) {
 static void enqueue(Action a) {
     Request r = {};
     r.type = a.type;
+    r.submitted_ms = esp_timer_get_time() / 1000;
     snprintf(r.value, sizeof(r.value), "%s", a.value.c_str());
     if (xQueueSend(commands, &r, 0) != pdTRUE) {
         xSemaphoreTake(state_lock, portMAX_DELAY);
@@ -49,7 +51,9 @@ static void worker(void *) {
     UsbTransport usb;
     Session meter(usb);
     bool had_serial = false;
-    int64_t next_poll = 0, retry = 0;
+    int64_t next_poll = 0, retry = 0, setting_submitted = 0;
+    uint64_t setting_sample = 0;
+    int setting_action = -1;
     while (true) {
         Request req;
         if (xQueueReceive(commands, &req, pdMS_TO_TICKS(10)) == pdTRUE) {
@@ -83,18 +87,34 @@ static void worker(void *) {
                 xQueueReset(commands);
                 retry = 0;
             } else {
-                const bool remote = action.type != ActionType::Hold &&
-                                    action.type != ActionType::ClearStats &&
-                                    action.type != ActionType::PollInterval;
+                const bool remote =
+                    action.type != ActionType::Hold && action.type != ActionType::PollInterval;
                 applying = remote;
                 if (remote) {
                     State pending = meter.state;
                     pending.reading = {};
                     publish(pending);
                 }
-                if (!meter.apply(action))
+                const auto started = esp_timer_get_time() / 1000;
+                const bool applied = meter.apply(action);
+                if (!applied)
                     ESP_LOGW("meter", "Action failed: %s / %s", meter.state.error.c_str(),
                              meter.state.error_detail.c_str());
+                ESP_LOGI("timing", "Action=%d queue=%lldms execute=%lldms ready=%d error=%s",
+                         (int)action.type, started - req.submitted_ms,
+                         esp_timer_get_time() / 1000 - started, meter.state.ready,
+                         meter.state.error.c_str());
+                if (remote) {
+                    setting_submitted = 0;
+                    if (applied && action.type >= ActionType::Primary &&
+                        action.type <= ActionType::Equivalent) {
+                        setting_submitted = req.submitted_ms;
+                        setting_sample = meter.state.sample_sequence;
+                        setting_action = (int)action.type;
+                    }
+                }
+                // Publish verified settings before clearing the pending indicator.
+                publish(meter.state);
                 applying = false;
                 if (remote) {
                     next_poll = 0;
@@ -120,7 +140,8 @@ static void worker(void *) {
                 meter.state.error.clear();
                 publish(meter.state);
                 ESP_LOGI("meter", "Serial ready; querying *IDN? before declaring connection");
-                meter.connect();
+                if (meter.connect() && meter.apply({ActionType::ToleranceInspect, ""}))
+                    meter.apply({ActionType::RecordingInspect, ""});
                 ESP_LOGI("meter", "Identity accepted=%d ready=%d model=%s mode=Query",
                          meter.state.connected, meter.state.ready, profile(meter.state.model).name);
             } else {
@@ -135,11 +156,16 @@ static void worker(void *) {
             publish(meter.state);
             retry = now + 3000;
         }
-        if (meter.state.ready && now >= next_poll) {
-            if (!meter.poll())
+        if (meter.state.ready && now >= next_poll && uxQueueMessagesWaiting(commands) == 0) {
+            if (!meter.poll(true, []() { return uxQueueMessagesWaiting(commands) != 0; }))
                 ESP_LOGW("meter", "Query failed: %s / %s", meter.state.error.c_str(),
                          meter.state.error_detail.c_str());
             publish(meter.state);
+            if (setting_submitted && meter.state.sample_sequence != setting_sample) {
+                ESP_LOGI("timing", "Setting=%d first_sample_total=%lldms", setting_action,
+                         esp_timer_get_time() / 1000 - setting_submitted);
+                setting_submitted = 0;
+            }
             next_poll = esp_timer_get_time() / 1000 + meter.state.poll_ms;
         }
         // Failed identity/protocol stays visible; only explicit Retry or hotplug retries identity.
@@ -152,7 +178,7 @@ static void refresh_ui(lv_timer_t *) {
     xSemaphoreGive(state_lock);
     if (s.phase == ConnectionPhase::Disconnected || s.phase == ConnectionPhase::UsbEnumerated)
         s.phase = UsbTransport::phase();
-    panel_ui_update(s, applying);
+    panel_ui_update(s, applying || uxQueueMessagesWaiting(commands) != 0);
 }
 extern "C" void app_main() {
     ESP_LOGI("panel",
@@ -183,7 +209,7 @@ extern "C" void app_main() {
         panel_ui_create(enqueue);
         auto *show = lv_timer_create([](lv_timer_t *) { board_show_display(); }, 700, nullptr);
         lv_timer_set_repeat_count(show, 1);
-        lv_timer_create(refresh_ui, 100, nullptr);
+        lv_timer_create(refresh_ui, 50, nullptr);
         lvgl_port_unlock();
     }
     assert(xTaskCreatePinnedToCore(worker, "meter_worker", 8192, nullptr, 4, nullptr, 0) == pdPASS);
@@ -206,13 +232,21 @@ extern "C" void app_main() {
                     board_set_pixel_clock(21000000);
                 else if (!strncmp(command, "locale ", 7))
                     enqueue({ActionType::Language, command + 7});
+                else if (!strcmp(command, "trace on"))
+                    UsbTransport::set_trace(true);
+                else if (!strcmp(command, "trace off"))
+                    UsbTransport::set_trace(false);
+                else if (!strcmp(command, "equivalent SER") || !strcmp(command, "equivalent PAL"))
+                    enqueue({ActionType::Equivalent, command + 11});
+                else if (!strcmp(command, "reconnect"))
+                    enqueue({ActionType::Reconnect, ""});
                 else if (!strcmp(command, "state")) {
                     xSemaphoreTake(state_lock, portMAX_DELAY);
                     ESP_LOGI(
                         "state",
                         "phase=%d connected=%d ready=%d primary=%s samples=%llu error=%s detail=%s",
                         (int)snapshot.phase, snapshot.connected, snapshot.ready,
-                        snapshot.primary.c_str(), (unsigned long long)snapshot.stats.count,
+                        snapshot.primary.c_str(), (unsigned long long)snapshot.sample_sequence,
                         snapshot.error.c_str(), snapshot.error_detail.c_str());
                     ESP_LOGI(
                         "meter_state",
@@ -223,6 +257,20 @@ extern "C" void app_main() {
                             .c_str(),
                         format_value(snapshot.reading.secondary, secondary_unit(snapshot.secondary))
                             .c_str());
+                    ESP_LOGI(
+                        "tolerance",
+                        "known=%d enabled=%d range=%d nominal=%s deviation=%s "
+                        "bin=%s",
+                        snapshot.tolerance.known, snapshot.tolerance.enabled,
+                        snapshot.tolerance.percent,
+                        format_value(snapshot.tolerance.nominal, primary_unit(snapshot.primary))
+                            .c_str(),
+                        format_value(snapshot.tolerance.deviation, "%").c_str(),
+                        snapshot.reading.bin.c_str());
+                    ESP_LOGI("recording", "known=%d enabled=%d revision=%llu circuit=%s poll_ms=%u",
+                             snapshot.recording.known, snapshot.recording.enabled,
+                             (unsigned long long)snapshot.recording.revision,
+                             snapshot.equivalent.c_str(), snapshot.poll_ms);
                     ESP_LOGI("locale", "current=%s", snapshot.locale.c_str());
                     xSemaphoreGive(state_lock);
                 }

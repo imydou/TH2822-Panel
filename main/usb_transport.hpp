@@ -15,6 +15,7 @@ class UsbTransport : public th::Transport {
   public:
     UsbTransport();
     static void install();
+    static void set_trace(bool);
     bool open();
     void close();
     bool connected() const {

@@ -45,11 +45,17 @@ class Framer {
         bad = false;
     }
 };
-struct Stats {
-    uint64_t count = 0;
-    double min = 0, max = 0, mean = 0;
-    void add(Value);
+// Native REC data only: no panel-side accumulation or fabricated sample count.
+enum class RecordingView { Unknown, Present, Maximum, Average, Minimum };
+struct Recording {
+    bool monitored = false, known = false, enabled = false;
+    RecordingView view = RecordingView::Unknown;
+    Reading value;
+    bool live = false; // FETCH current values verified only on the measured E firmware.
+    uint64_t read_at_ms = 0;
+    uint64_t revision = 0;
 };
+bool parse_recording(const std::string &, Reading &);
 enum class ConnectionPhase {
     Disconnected,
     UsbEnumerated,
@@ -58,6 +64,12 @@ enum class ConnectionPhase {
     Identified,
     Unsupported
 };
+struct Tolerance {
+    bool monitored = false, known = false, enabled = false;
+    int percent = 0; // 0 = no sorting range; BIN1..4 map to 1/5/10/20%.
+    Value nominal, deviation;
+};
+bool parse_tolerance_range(const std::string &, int &);
 struct State {
     Model model = Model::Unknown;
     std::string locale = "zh-CN", error_detail;
@@ -67,11 +79,24 @@ struct State {
     double level = 0;
     bool connected = false, ready = false, hold = false;
     ConnectionPhase phase = ConnectionPhase::Disconnected;
-    unsigned poll_ms = 1000;
+    unsigned poll_ms = 500;
     Reading reading;
-    Stats stats;
+    Tolerance tolerance;
+    Recording recording;
     uint64_t sample_sequence = 0;
 };
+enum class ToleranceResult {
+    Inactive,
+    Unknown,
+    NoRange,
+    Held,
+    Invalid,
+    Overrange,
+    Within,
+    Outside
+};
+// Visual classification of the instrument-reported percentage; never recalculates deviation.
+ToleranceResult tolerance_result(const State &);
 enum class ActionType {
     Primary,
     Secondary,
@@ -80,10 +105,20 @@ enum class ActionType {
     Equivalent,
     PollInterval,
     Hold,
-    ClearStats,
+    ReservedLocalStats, // Retired action 7; never sends an instrument command.
     Resync,
     Reconnect,
-    Language
+    Language,
+    ToleranceInspect,
+    ToleranceEnable,
+    ToleranceDisable,
+    ToleranceCapture,
+    ToleranceRange,
+    RecordingInspect,
+    RecordingEnable,
+    RecordingDisable,
+    RecordingSelect,
+    RecordingUpdate
 };
 struct Action {
     ActionType type;
@@ -106,16 +141,24 @@ class Session {
     Transport &io;
     bool busy = false;
     unsigned settle_ms = 1200;
-    bool query(const std::string &, std::string &);
+    bool fast_readback = false;
+    bool verified_context = false;
+    uint64_t verified_context_at = 0;
+    bool query(const std::string &, std::string &, bool retry = true);
     bool fail(const std::string &, const std::string &detail = "");
-    bool refresh();
+    bool refresh(bool full = true);
+    bool refresh_tolerance(bool full = true);
+    bool refresh_recording();
+    bool select_recording(RecordingView, bool force = false);
     bool set(const std::string &, const std::string &, const std::string &);
 
   public:
     State state;
     explicit Session(Transport &t) : io(t) {}
     bool connect();
-    bool poll();
+    // Reuse only the immediately preceding successful setting readback (max 250 ms).
+    // Yield only between completed query transactions, never with a response outstanding.
+    bool poll(bool use_verified_context = false, bool (*action_waiting)() = nullptr);
     bool apply(const Action &);
     void disconnect(const std::string &);
 };
