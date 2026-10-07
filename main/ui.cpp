@@ -2,7 +2,9 @@
 #include "i18n.hpp"
 #include "lvgl.h"
 #include <array>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 using namespace th;
 LV_FONT_DECLARE(panel_cjk_14);
@@ -82,10 +84,48 @@ static void close_modal() {
         modal = nullptr;
     }
 }
+// A full-screen input shield prevents taps reaching controls behind a dialog.
+static lv_obj_t *open_modal(int x, int y, int w, int h) {
+    close_modal();
+    modal = lv_obj_create(lv_scr_act());
+    lv_obj_set_pos(modal, 0, 0);
+    lv_obj_set_size(modal, 800, 480);
+    lv_obj_set_style_pad_all(modal, 0, 0);
+    lv_obj_set_style_border_width(modal, 0, 0);
+    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_bg_color(modal, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(modal, LV_OPA_60, 0);
+    lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
+    return card(modal, x, y, w, h);
+}
+static bool is_current(const Action &a) {
+    switch (a.type) {
+    case ActionType::Primary:
+        return a.value == view.primary;
+    case ActionType::Secondary:
+        return a.value == view.secondary;
+    case ActionType::Equivalent:
+        return a.value == view.equivalent;
+    case ActionType::Frequency:
+        return a.value == std::to_string(view.hz);
+    case ActionType::Level:
+        return std::abs(std::strtod(a.value.c_str(), nullptr) - view.level) < 1e-6;
+    case ActionType::PollInterval:
+        return a.value == std::to_string(view.poll_ms);
+    case ActionType::Language:
+        return a.value == view.locale;
+    default:
+        return false;
+    }
+}
 static void choose(lv_event_t *e) {
     auto *a = (Action *)lv_event_get_user_data(e);
     Action copy = *a;
+    const bool unchanged = is_current(copy);
     close_modal();
+    // Rewriting an unchanged primary/frequency can disable native AUTO on the meter.
+    if (unchanged || (copy.type != ActionType::Language && !view.ready))
+        return;
     send_action(copy);
 }
 static void cancel(lv_event_t *) {
@@ -97,15 +137,12 @@ struct Choice {
 };
 static void menu(ActionType type, const char *heading, const std::vector<Choice> &items,
                  bool native_names = false) {
-    close_modal();
-    modal = card(lv_scr_act(), 110, 24, 580, 430);
-    lv_obj_set_style_border_width(modal, 2, 0);
-    lv_obj_set_style_border_color(modal, lv_color_hex(ACCENT), 0);
-    label(modal, tr(heading), 22, 19, 446, fonts().normal, INK);
-    button(modal, tr("button.cancel"), 472, 8, 90, 48, cancel);
-    auto *list = lv_obj_create(modal);
-    lv_obj_set_pos(list, 12, 62);
-    lv_obj_set_size(list, 554, 350);
+    auto *panel = open_modal(80, 24, 640, 430);
+    label(panel, tr(heading), 22, 19, 490, fonts().normal, INK);
+    button(panel, tr("button.cancel"), 532, 8, 90, 48, cancel);
+    auto *list = lv_obj_create(panel);
+    lv_obj_set_pos(list, 16, 66);
+    lv_obj_set_size(list, 608, 304);
     lv_obj_set_style_bg_opa(list, 0, 0);
     lv_obj_set_style_border_width(list, 0, 0);
     lv_obj_set_style_pad_all(list, 0, 0);
@@ -116,14 +153,32 @@ static void menu(ActionType type, const char *heading, const std::vector<Choice>
     for (auto &i : items)
         actions.push_back({type, i.value});
     for (size_t i = 0; i < items.size(); ++i) {
-        auto *b =
-            button(list, items[i].label.c_str(), 8, (int)i * 58, 514, 50, choose, &actions[i]);
-        if (!items[i].enabled)
-            lv_obj_add_state(b, LV_STATE_DISABLED);
+        auto *b = button(list, items[i].label.c_str(), (int)(i % 2) * 306, (int)(i / 2) * 98, 294,
+                         88, choose, &actions[i]);
+        auto *text = lv_obj_get_child(b, 0);
+        lv_obj_set_width(text, 266);
+        lv_obj_set_style_text_align(text, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(text, LV_ALIGN_CENTER, 0, 8);
         if (native_names)
-            lv_obj_set_style_text_font(lv_obj_get_child(b, 0), &panel_cjk_20, 0);
+            lv_obj_set_style_text_font(text, &panel_cjk_20, 0);
+        if (!items[i].enabled) {
+            lv_obj_add_state(b, LV_STATE_DISABLED);
+            auto *note = label(b, tr("choice.unavailable"), 0, 0, 266, fonts().small, MUTED);
+            lv_obj_align(note, LV_ALIGN_TOP_MID, 0, -8);
+            lv_obj_set_style_text_align(note, LV_TEXT_ALIGN_CENTER, 0);
+        } else if (is_current(actions[i])) {
+            lv_obj_set_style_bg_color(b, lv_color_hex(0x1c4c50), 0);
+            lv_obj_set_style_border_width(b, 2, 0);
+            lv_obj_set_style_border_color(b, lv_color_hex(ACCENT), 0);
+            auto *note = label(b, tr("choice.current"), 0, 0, 266, fonts().small, ACCENT);
+            lv_obj_align(note, LV_ALIGN_TOP_MID, 0, -8);
+            lv_obj_set_style_text_align(note, LV_TEXT_ALIGN_CENTER, 0);
+        }
     }
+    label(panel, tr(type == ActionType::Language ? "choice.language_hint" : "choice.hint"), 22, 385,
+          596, fonts().small, MUTED);
 }
+
 static void controls(lv_event_t *e) {
     auto i = (intptr_t)lv_event_get_user_data(e);
     bool ac = view.primary != "DCR";
@@ -168,19 +223,17 @@ static void synchronize(lv_event_t *) {
     send_action({ActionType::Resync, ""});
 }
 static void guidance(lv_event_t *) {
-    close_modal();
-    modal = card(lv_scr_act(), 65, 24, 670, 430);
-    label(modal, tr("menu.guide"), 22, 19, 500, fonts().normal, INK);
-    button(modal, tr("button.cancel"), 562, 8, 90, 48, cancel);
-    label(modal, tr("hint.query_steps"), 24, 80, 622, fonts().normal, INK);
-    label(modal, view.identity.c_str(), 24, 365, 622, fonts().small, MUTED);
+    auto *panel = open_modal(65, 24, 670, 430);
+    label(panel, tr("menu.guide"), 22, 19, 500, fonts().normal, INK);
+    button(panel, tr("button.cancel"), 562, 8, 90, 48, cancel);
+    label(panel, tr("hint.query_steps"), 24, 80, 622, fonts().normal, INK);
+    label(panel, view.identity.c_str(), 24, 365, 622, fonts().small, MUTED);
 }
 static void instrument_info(lv_event_t *) {
-    close_modal();
-    modal = card(lv_scr_act(), 40, 24, 720, 430);
-    label(modal, tr("menu.instrument"), 22, 19, 530, fonts().heading, INK);
-    button(modal, tr("button.cancel"), 612, 8, 90, 48, cancel);
-    auto *body = lv_obj_create(modal);
+    auto *panel = open_modal(40, 24, 720, 430);
+    label(panel, tr("menu.instrument"), 22, 19, 530, fonts().heading, INK);
+    button(panel, tr("button.cancel"), 612, 8, 90, 48, cancel);
+    auto *body = lv_obj_create(panel);
     lv_obj_set_pos(body, 16, 70);
     lv_obj_set_size(body, 688, 340);
     lv_obj_set_style_bg_opa(body, 0, 0);
@@ -247,9 +300,9 @@ void panel_ui_create(std::function<void(Action)> send) {
     }
     b = button(root, tr("button.hold"), 24, 391, 104, 49, hold);
     hold_label = lv_obj_get_child(b, 0);
-    button(root, tr("button.reset"), 140, 391, 104, 49, reset_stats);
-    button(root, tr("button.info"), 256, 391, 120, 49, instrument_info);
-    sync_button = button(root, tr("button.sync"), 388, 391, 124, 49, synchronize);
+    button(root, tr("button.reset"), 140, 391, 120, 49, reset_stats);
+    button(root, tr("button.info"), 272, 391, 120, 49, instrument_info);
+    sync_button = button(root, tr("button.sync"), 404, 391, 108, 49, synchronize);
     stats = label(root, tr("stats.empty"), 530, 382, 245, fonts().small, MUTED);
     message = label(root, tr("hint.offline"), 24, 453, 752, fonts().small, MUTED);
     lv_label_set_long_mode(message, LV_LABEL_LONG_DOT);

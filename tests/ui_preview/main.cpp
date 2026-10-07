@@ -45,11 +45,26 @@ static lv_obj_t *find_button(lv_obj_t *parent, const char *text) {
     }
     return nullptr;
 }
-static void click(const char *key) {
-    auto *b = find_button(lv_scr_act(), i18n::text(key));
+static void click_text(const std::string &text) {
+    auto *b = find_button(lv_scr_act(), text.c_str());
     assert(b);
     lv_event_send(b, LV_EVENT_CLICKED, nullptr);
 }
+static void click(const char *key) {
+    click_text(i18n::text(key));
+}
+static void tap(int x, int y) {
+    mx = x;
+    my = y;
+    for (bool pressed : {true, false}) {
+        down = pressed;
+        for (int i = 0; i < 8; ++i) {
+            lv_tick_inc(10);
+            lv_timer_handler();
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     bool headless = argc > 1 && std::string(argv[1]) == "--capture";
     std::string dest = argc > 2 ? argv[2] : "ui";
@@ -90,10 +105,14 @@ int main(int argc, char **argv) {
     session.state.locale = locale;
     session.state.usb_info = "VID 10C4 / PID EA60 (TEST FIXTURE)";
     th::State *shown = &offline;
+    std::vector<th::Action> actions;
     panel_ui_create([&](th::Action a) {
+        actions.push_back(a);
         if (a.type == th::ActionType::Language) {
             session.state.locale = a.value;
             offline.locale = a.value;
+        } else {
+            assert(session.apply(a));
         }
     });
     unsigned ticks = 0;
@@ -151,14 +170,42 @@ int main(int argc, char **argv) {
             }
             if (ticks == 100) {
                 screenshot(dest + "-reading-fixture.ppm");
-                click("button.info");
+                click_text(i18n::format("control.freq", {{"value", "1 kHz"}}));
             }
             if (ticks == 120) {
+                screenshot(dest + "-frequency-menu.ppm");
+                const auto before = actions.size();
+                tap(60, 415);
+                assert(actions.size() == before && !session.state.hold);
+                assert(find_button(lv_scr_act(), "1 kHz"));
+                click_text("1 kHz");
+                assert(actions.size() == before);
+                assert(!find_button(lv_scr_act(), "1 kHz"));
+                for (const auto &item : std::vector<std::array<std::string, 3>>{
+                         {"control.mode", "C", "C"},
+                         {"control.level", "0.6 V", "0.6 V"},
+                         {"control.circuit", i18n::text("value.series"),
+                          i18n::text("value.series")},
+                         {"control.second", "D", "D"},
+                         {"control.source", "1000 ms", i18n::text("value.query_slow")}}) {
+                    click_text(i18n::format(item[0].c_str(), {{"value", item[1]}}));
+                    click_text(item[2]);
+                    assert(actions.size() == before);
+                }
+                click_text(i18n::format("control.freq", {{"value", "1 kHz"}}));
+                click_text("100 Hz");
+                assert(actions.size() == before + 1);
+                assert(actions.back().type == th::ActionType::Frequency && session.state.hz == 100);
+                session.poll();
+                panel_ui_update(session.state);
+                click("button.info");
+            }
+            if (ticks == 140) {
                 screenshot(dest + "-info.ppm");
                 click("button.cancel");
                 click("button.guide");
             }
-            if (ticks == 140) {
+            if (ticks == 160) {
                 screenshot(dest + "-guide.ppm");
                 click("button.cancel");
                 session.state.ready = false;
@@ -166,7 +213,7 @@ int main(int argc, char **argv) {
                 session.state.error = "error.equivalent";
                 session.state.error_detail = "FUNC:EQU? => [TEST-BAD]";
             }
-            if (ticks == 160) {
+            if (ticks == 180) {
                 assert(!lv_obj_has_flag(find_button(lv_scr_act(), i18n::text("button.sync")),
                                         LV_OBJ_FLAG_HIDDEN));
                 screenshot(dest + "-error.ppm");
@@ -175,7 +222,7 @@ int main(int argc, char **argv) {
                 offline.phase = th::ConnectionPhase::Disconnected;
                 offline.error = "usb.unplugged";
             }
-            if (ticks == 180) {
+            if (ticks == 200) {
                 assert(!find_button(lv_scr_act(), i18n::text("button.hold")));
                 assert(!find_button(lv_scr_act(), i18n::text("button.info")));
                 screenshot(dest + "-disconnect.ppm");
