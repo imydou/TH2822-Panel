@@ -6,6 +6,16 @@
 
 > TH2822E / VER4.5.2307 已完成当前项目功能的实机验证（用户确认）。TH2822A、C、D 已按文档建立能力配置并做主机测试，尚未完成本项目实机联调；不能将其视为已验证兼容。
 
+## 实机照片
+
+TH2822E 与触摸面板的实际运行画面，点击图片可查看大图。
+
+| 常规测量 | 常规测量：参数锁定状态 |
+| --- | --- |
+| [![常规测量主界面，显示主副参数及测量设置](docs/images/measurement.jpg)](docs/images/measurement.jpg) | [![常规测量主界面，参数按钮显示锁定图标](docs/images/measurement-locked.jpg)](docs/images/measurement-locked.jpg) |
+| **容差比较：超出容差** | **原生 REC：当前值** |
+| [![容差比较页面，以红色偏差和边框提示超出容差](docs/images/tolerance-outside.jpg)](docs/images/tolerance-outside.jpg) | [![统计记录页面，显示主副参数当前值和统计项入口](docs/images/recording.jpg)](docs/images/recording.jpg) |
+
 ## 可以做什么
 
 | 功能 | 使用方式 |
@@ -93,6 +103,10 @@ UART 口和原生 USB 口职责不同，可同时用于板卡供电调试与仪�
 
 ## 打印外壳
 
+<p align="center">
+  <a href="docs/images/panel-with-meter.jpg"><img src="docs/images/panel-with-meter.jpg" alt="装入打印外壳的触摸面板与 TH2822E 仪表实物" width="420"></a>
+</p>
+
 [enclosure/](enclosure/) 保存 **R9 主壳与两个独立 G20 按钮**，包括可编辑 CAD、打印网格、切片工程、参数及检查证据。
 
 | 用途 | 文件 |
@@ -179,4 +193,6 @@ enclosure/     R9 外壳 CAD、打印工程、网格和检查记录
 
 更多资料：[硬件与接线](docs/HARDWARE.md) · [型号证据](docs/SUPPORT.md) · [实机验收](docs/VALIDATION.md) · [语言与字体](docs/I18N.md) · [开发记录](docs/PROGRESS.md)。
 
-协议行为参考 [LHX369963/th2822d-cli](https://github.com/LHX369963/th2822d-cli)，板级初始化依据微雪官方示例。第三方代码、组件、字体和资料的来源及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；这些许可不自动覆盖本仓库全部内容。
+本项目独立实现 USB 传输、命令调度、响应解析和触摸交互，使用同惠仪表的原生通信命令，依据官方手册与实机测试开发。[LHX369963/th2822d-cli](https://github.com/LHX369963/th2822d-cli) 仅作为命令及行为的查证参考，不作为本项目的通信库或协议规范。
+
+板级初始化依据微雪官方示例。所用第三方组件、字体及参考资料的来源与许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
