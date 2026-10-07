@@ -16,11 +16,11 @@ static std::string upper(std::string s) {
     return s;
 }
 const Profile &profile(Model m) {
-    static const Profile p[] = {{Model::Unknown, "UNKNOWN", false, false, false, 0},
-                                {Model::A, "TH2822A", false, false, true, 10000},
-                                {Model::C, "TH2822C", false, false, true, 100000},
-                                {Model::D, "TH2822D", true, true, true, 10000},
-                                {Model::E, "TH2822E", true, true, true, 100000}};
+    static const Profile p[] = {{Model::Unknown, "UNKNOWN", false, false, 0},
+                                {Model::A, "TH2822A", false, false, 10000},
+                                {Model::C, "TH2822C", false, false, 100000},
+                                {Model::D, "TH2822D", true, true, 10000},
+                                {Model::E, "TH2822E", true, true, 100000}};
     unsigned i = (unsigned)m;
     return p[i < 5 ? i : 0];
 }
@@ -220,7 +220,6 @@ void Stats::add(Value v) {
 }
 bool Session::fail(const std::string &why, const std::string &detail) {
     state.ready = false;
-    state.streaming = false;
     state.reading = {};
     state.error = why;
     state.error_detail = detail;
@@ -229,7 +228,6 @@ bool Session::fail(const std::string &why, const std::string &detail) {
 void Session::disconnect(const std::string &why) {
     state.connected = false;
     state.phase = ConnectionPhase::Disconnected;
-    state.streaming = false;
     state.ready = false;
     state.reading = {};
     state.stats = {};
@@ -247,7 +245,7 @@ bool Session::query(const std::string &cmd, std::string &out) {
     // Both TH2822/A/C and D/E manuals say any command stops Auto Fetch. Send IDN even if a stream
     // already exists; bounded demultiplexing discards preceding measurement frames.
     for (int attempt = 0; attempt < 2; ++attempt) {
-        if (!io.healthy() || !io.write(cmd + "\r\n")) {
+        if (!io.healthy() || !io.write(cmd + "\n")) {
             busy = false;
             return fail("error.write");
         }
@@ -297,10 +295,12 @@ bool Session::connect() {
         return fail(series_only ? "error.model_ambiguous" : "error.unsupported_model", id);
     }
     // Only a valid supported model/firmware/serial response establishes identity.
+    state.firmware = fields[1];
+    state.serial = fields[2];
     state.connected = true;
     state.phase = ConnectionPhase::Identified;
-    state.acquisition =
-        profile(state.model).auto_fetch_documented ? Acquisition::AutoFetch : Acquisition::Query;
+    // The touch panel owns acquisition: settings resume polling without physical RMT.
+    state.poll_ms = 1000;
     settle_ms = (state.model == Model::D && fields[1] == "VER4.5.2307") ? 800 : 1200;
     return refresh();
 }
@@ -310,7 +310,7 @@ bool Session::refresh() {
         return false;
     s = upper(trim(s));
     if (s != "L" && s != "C" && s != "R" && s != "Z" && s != "DCR")
-        return fail("error.primary");
+        return fail("error.primary", "FUNC:IMPA? => [" + s + "]");
     if (s == "DCR" && !profile(state.model).dcr)
         return fail("error.dcr_profile");
     state.primary = s;
@@ -324,28 +324,27 @@ bool Session::refresh() {
             return false;
         s = upper(trim(s));
         if (s != "D" && s != "Q" && s != "THETA" && s != "ESR" && s != "NULL")
-            return fail("error.secondary");
+            return fail("error.secondary", "FUNC:IMPB? => [" + s + "]");
         state.secondary = s;
         if (!query("FUNC:EQU?", s))
             return false;
         s = upper(trim(s));
         if (s != "SER" && s != "PAL")
-            return fail("error.equivalent");
+            return fail("error.equivalent", "FUNC:EQU? => [" + s + "]");
         state.equivalent = s;
         if (!query("FREQ?", s))
             return false;
         if (!parse_frequency(s, state.hz) || !valid_frequency(state.model, state.hz))
-            return fail("error.frequency");
+            return fail("error.frequency", "FREQ? => [" + s + "]");
         if (profile(state.model).selectable_level) {
             if (!query("VOLT?", s))
                 return false;
             if (!parse_level(s, state.level))
-                return fail("error.level");
+                return fail("error.level", "VOLT? => [" + s + "]");
         } else
             state.level = 0.6; // fixed hardware level from A/C datasheet, not a queried readback
     }
     state.ready = true;
-    state.streaming = false;
     state.error = "";
     state.error_detail.clear();
     return true;
@@ -355,9 +354,8 @@ bool Session::set(const std::string &command, const std::string &readback,
     state.ready = false;
     state.reading = {};
     state.stats = {};
-    state.streaming = false;
     state.hold = false;
-    if (!io.healthy() || !io.write(command + "\r\n"))
+    if (!io.healthy() || !io.write(command + "\n"))
         return fail("error.setting");
     io.delay(settle_ms);
     std::string got;
@@ -387,22 +385,13 @@ bool Session::apply(const Action &a) {
         state.stats = {};
         return true;
     }
-    if (a.type == ActionType::Acquisition) {
+    if (a.type == ActionType::PollInterval) {
         if (!state.connected || !state.ready)
             return false;
-        if (a.value == "auto") {
-            if (!profile(state.model).auto_fetch_documented)
-                return false;
-            state.acquisition = Acquisition::AutoFetch;
-        } else if (a.value == "250" || a.value == "500" || a.value == "1000") {
-            state.acquisition = Acquisition::Query;
-            state.poll_ms = static_cast<unsigned>(std::strtoul(a.value.c_str(), nullptr, 10));
-        } else
+        if (a.value != "250" && a.value != "500" && a.value != "1000")
             return false;
-        state.reading = {};
-        state.stats = {};
-        state.hold = false;
-        return refresh();
+        state.poll_ms = static_cast<unsigned>(std::strtoul(a.value.c_str(), nullptr, 10));
+        return true; // Local scheduling only; no instrument command or statistics reset.
     }
     if (a.type == ActionType::Resync) {
         if (!state.connected)
@@ -452,7 +441,7 @@ bool Session::apply(const Action &a) {
     return false;
 }
 bool Session::poll() {
-    if (!state.ready || state.acquisition != Acquisition::Query)
+    if (!state.ready)
         return false;
     const State before = state;
     if (!refresh())
@@ -476,33 +465,5 @@ bool Session::poll() {
         ++state.sample_sequence;
     }
     return true;
-}
-bool Session::receive(unsigned timeout_ms) {
-    if (!state.ready || state.acquisition != Acquisition::AutoFetch)
-        return false;
-    std::string line;
-    if (!io.line(line, timeout_ms)) {
-        if (!io.healthy())
-            return fail("error.rx");
-        return false;
-    }
-    Reading r;
-    if (!parse_fetch(line, state.primary == "DCR", r))
-        return fail("error.stream_format", line);
-    state.streaming = true;
-    state.error.clear();
-    state.error_detail.clear();
-    if (!state.hold) {
-        state.reading = r;
-        state.stats.add(r.primary);
-        ++state.sample_sequence;
-    }
-    return true;
-}
-void Session::stream_stale() {
-    state.streaming = false;
-    state.reading = {};
-    state.hold = false;
-    // Identity remains proven. Stopping Auto Fetch is not USB disconnection.
 }
 } // namespace th

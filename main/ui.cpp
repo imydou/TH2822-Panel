@@ -30,6 +30,7 @@ static std::string fmt(const char *key, const std::string &value) {
 static std::function<void(Action)> send_action;
 static State view;
 static std::string previous;
+static bool main_page = false;
 static lv_obj_t *title, *status, *main_value, *sub_value, *main_name, *sub_name, *message, *stats,
     *hold_label, *sync_button;
 static lv_obj_t *control[6], *control_text[6], *modal = nullptr;
@@ -149,11 +150,10 @@ static void controls(lv_event_t *e) {
         menu(ActionType::Secondary, "menu.second",
              {{"D", "D"}, {"Q", "Q"}, {"THETA", "THETA"}, {"ESR", "ESR"}});
     if (i == 5)
-        menu(ActionType::Acquisition, "menu.source",
-             {{"auto", tr("value.auto_fetch"), profile(view.model).auto_fetch_documented},
-              {"250", tr("value.query_fast")},
+        menu(ActionType::PollInterval, "menu.source",
+             {{"1000", tr("value.query_slow")},
               {"500", tr("value.query_medium")},
-              {"1000", tr("value.query_slow")}});
+              {"250", tr("value.query_fast")}});
 }
 static void hold(lv_event_t *) {
     send_action({ActionType::Hold, ""});
@@ -172,8 +172,33 @@ static void guidance(lv_event_t *) {
     modal = card(lv_scr_act(), 65, 24, 670, 430);
     label(modal, tr("menu.guide"), 22, 19, 500, fonts().normal, INK);
     button(modal, tr("button.cancel"), 562, 8, 90, 48, cancel);
-    label(modal, tr("hint.auto_steps"), 24, 80, 622, fonts().normal, INK);
+    label(modal, tr("hint.query_steps"), 24, 80, 622, fonts().normal, INK);
     label(modal, view.identity.c_str(), 24, 365, 622, fonts().small, MUTED);
+}
+static void instrument_info(lv_event_t *) {
+    close_modal();
+    modal = card(lv_scr_act(), 40, 24, 720, 430);
+    label(modal, tr("menu.instrument"), 22, 19, 530, fonts().heading, INK);
+    button(modal, tr("button.cancel"), 612, 8, 90, 48, cancel);
+    auto *body = lv_obj_create(modal);
+    lv_obj_set_pos(body, 16, 70);
+    lv_obj_set_size(body, 688, 340);
+    lv_obj_set_style_bg_opa(body, 0, 0);
+    lv_obj_set_style_border_width(body, 0, 0);
+    lv_obj_set_style_pad_all(body, 6, 0);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+    std::string text =
+        fmt("info.model", profile(view.model).name) + "\n" + fmt("info.firmware", view.firmware) +
+        "\n" + fmt("info.serial", view.serial) + "\n\n" + fmt("info.identity", view.identity) +
+        "\n\n" + fmt("info.usb", view.usb_info) + "\n" + tr("info.transport") + "\n\n" +
+        tr("info.snapshot") + "\n" + fmt("info.function", view.primary + " / " + view.secondary) +
+        "\n" + fmt("info.frequency", view.hz ? std::to_string(view.hz) + " Hz" : "--") + "\n";
+    char volts[24];
+    std::snprintf(volts, sizeof(volts), "%.1f V", view.level);
+    text += fmt("info.level", view.level ? volts : "--") + "\n" +
+            fmt("info.circuit", view.equivalent.empty() ? "--" : view.equivalent) + "\n\n" +
+            tr("info.scope");
+    label(body, text.c_str(), 0, 0, 650, fonts().normal, INK);
 }
 static void languages(lv_event_t *) {
     std::vector<Choice> choices;
@@ -185,12 +210,24 @@ void panel_ui_create(std::function<void(Action)> send) {
     send_action = send;
     modal = nullptr;
     previous.clear();
+    main_page = view.connected;
     auto *root = lv_scr_act();
     lv_obj_clean(root);
     lv_obj_set_style_bg_color(root, lv_color_hex(BG), 0);
     lv_obj_set_style_text_color(root, lv_color_hex(INK), 0);
     lv_obj_set_style_text_font(root, fonts().normal, 0);
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
+    if (!main_page) {
+        label(root, "TH2822", 28, 20, 400, fonts().heading, INK);
+        button(root, tr("button.language"), 664, 12, 112, 44, languages);
+        auto *waiting = card(root, 64, 92, 672, 274);
+        label(waiting, "USB", 24, 20, 100, &lv_font_montserrat_24, ACCENT);
+        title = label(waiting, tr("connection.title"), 24, 60, 624, fonts().heading, INK);
+        status = label(waiting, tr("status.wait"), 24, 105, 624, fonts().normal, MUTED);
+        message = label(waiting, tr("hint.offline"), 24, 157, 624, fonts().normal, MUTED);
+        button(root, tr("button.retry"), 300, 390, 200, 56, reconnect);
+        return;
+    }
     title = label(root, "TH2822", 24, 17, 450, fonts().heading, INK);
     status = label(root, tr("status.wait"), 24, 52, 752, fonts().normal, MUTED);
     button(root, tr("button.language"), 540, 12, 112, 44, languages);
@@ -211,28 +248,31 @@ void panel_ui_create(std::function<void(Action)> send) {
     b = button(root, tr("button.hold"), 24, 391, 104, 49, hold);
     hold_label = lv_obj_get_child(b, 0);
     button(root, tr("button.reset"), 140, 391, 104, 49, reset_stats);
-    button(root, tr("button.retry"), 256, 391, 104, 49, reconnect);
-    sync_button = button(root, tr("button.sync"), 372, 391, 140, 49, synchronize);
+    button(root, tr("button.info"), 256, 391, 120, 49, instrument_info);
+    sync_button = button(root, tr("button.sync"), 388, 391, 124, 49, synchronize);
     stats = label(root, tr("stats.empty"), 530, 382, 245, fonts().small, MUTED);
     message = label(root, tr("hint.offline"), 24, 453, 752, fonts().small, MUTED);
     lv_label_set_long_mode(message, LV_LABEL_LONG_DOT);
 }
 void panel_ui_update(const State &s, bool pending) {
-    if (s.locale != i18n::current().id && i18n::set_locale(s.locale))
-        panel_ui_create(send_action);
+    const bool locale_changed = s.locale != i18n::current().id && i18n::set_locale(s.locale);
+    if (locale_changed || s.connected != main_page) {
+        view = s;
+        panel_ui_create(send_action); // Drops open dialogs on disconnect; no main controls remain.
+    }
     const std::string signature =
         s.locale + s.identity + s.primary + s.secondary + s.equivalent + s.error + s.error_detail +
         std::to_string((int)s.model) + std::to_string(s.hz) + std::to_string(s.level) +
         std::to_string(s.connected) + std::to_string(s.ready) + std::to_string((int)s.phase) +
-        std::to_string(s.streaming) + std::to_string((int)s.acquisition) + std::to_string(s.hold) +
-        std::to_string(s.poll_ms) + std::to_string(s.sample_sequence) +
+        std::to_string(s.hold) + std::to_string(s.poll_ms) + std::to_string(s.sample_sequence) +
         std::to_string(s.stats.count) + std::to_string(pending);
     if (signature == previous)
         return;
     previous = signature;
     view = s;
     auto model = s.model == Model::Unknown ? tr("model.unknown") : profile(s.model).name;
-    set_text(title, i18n::format("app.title", {{"model", model}}));
+    set_text(title,
+             main_page ? i18n::format("app.title", {{"model", model}}) : tr("connection.title"));
     const char *key = "status.wait";
     if (pending)
         key = "status.pending";
@@ -246,20 +286,23 @@ void panel_ui_update(const State &s, bool pending) {
         key = "status.enumerated";
     else if (s.connected && !s.ready)
         key = "status.locked";
-    else if (s.ready && s.acquisition == Acquisition::AutoFetch)
-        key = s.streaming ? "status.streaming" : "status.await_stream";
     else if (s.ready)
         key = "status.query";
     set_text(status, tr(key));
     lv_obj_set_style_text_color(status, lv_color_hex(s.ready ? ACCENT : MUTED), 0);
-    set_text(main_name, fmt(s.acquisition == Acquisition::AutoFetch ? "reading.primary_sync"
-                                                                    : "reading.primary",
-                            s.primary.empty() ? "--" : s.primary) +
+    if (!main_page) {
+        const auto details = s.error.empty()
+                                 ? std::string(tr("hint.offline"))
+                                 : i18n::format(s.error.c_str(), {{"detail", s.error_detail}});
+        set_text(message, details);
+        lv_obj_set_style_text_color(message, lv_color_hex(s.error.empty() ? MUTED : 0xffbf69), 0);
+        return;
+    }
+    set_text(main_name, fmt("reading.primary", s.primary.empty() ? "--" : s.primary) +
                             (s.hold ? std::string(" / ") + tr("reading.held") : ""));
     set_text(main_value, format_value(s.reading.primary, primary_unit(s.primary)));
-    set_text(sub_name, fmt(s.acquisition == Acquisition::AutoFetch ? "reading.secondary_sync"
-                                                                   : "reading.secondary",
-                           s.secondary == "NULL" ? tr("reading.none") : s.secondary));
+    set_text(sub_name,
+             fmt("reading.secondary", s.secondary == "NULL" ? tr("reading.none") : s.secondary));
     set_text(sub_value, s.secondary == "NULL"
                             ? "--"
                             : format_value(s.reading.secondary, secondary_unit(s.secondary)));
@@ -280,10 +323,8 @@ void panel_ui_update(const State &s, bool pending) {
                                                                              : "--"));
     set_text(control_text[4],
              fmt("control.second", s.secondary == "NULL" ? tr("reading.none") : s.secondary));
-    set_text(control_text[5], fmt("control.source", !s.connected ? "--"
-                                                    : s.acquisition == Acquisition::AutoFetch
-                                                        ? tr("value.auto_short")
-                                                        : std::to_string(s.poll_ms) + " ms"));
+    set_text(control_text[5],
+             fmt("control.source", !s.connected ? "--" : std::to_string(s.poll_ms) + " ms"));
     for (int i = 0; i < 6; ++i) {
         bool enabled = !pending && s.ready && (i == 0 || i == 5 || s.primary != "DCR") &&
                        (i != 2 || profile(s.model).selectable_level);
@@ -292,6 +333,10 @@ void panel_ui_update(const State &s, bool pending) {
         else
             lv_obj_add_state(control[i], LV_STATE_DISABLED);
     }
+    if (!s.connected || s.ready)
+        lv_obj_add_flag(sync_button, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_clear_flag(sync_button, LV_OBJ_FLAG_HIDDEN);
     if (s.connected && !pending)
         lv_obj_clear_state(sync_button, LV_STATE_DISABLED);
     else
@@ -309,10 +354,8 @@ void panel_ui_update(const State &s, bool pending) {
     std::string info;
     if (!s.error.empty())
         info = i18n::format(s.error.c_str(), {{"detail", s.error_detail}});
-    else if (s.ready && s.acquisition == Acquisition::AutoFetch)
-        info = tr(s.streaming ? "hint.stream_context" : "hint.enable_stream");
     else if (s.connected)
-        info = s.identity;
+        info = tr("hint.query_control");
     else
         info = tr("hint.offline");
     set_text(message, info);

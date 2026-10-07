@@ -28,6 +28,7 @@ static std::atomic<unsigned> touch_events{0}, ui_ticks{0};
 static void publish(const State &s) {
     xSemaphoreTake(state_lock, portMAX_DELAY);
     snapshot = s;
+    snapshot.usb_info = UsbTransport::descriptor_details();
     snapshot.locale = preferred_locale;
     xSemaphoreGive(state_lock);
 }
@@ -48,7 +49,7 @@ static void worker(void *) {
     UsbTransport usb;
     Session meter(usb);
     bool had_serial = false;
-    int64_t next_poll = 0, retry = 0, last_frame = 0;
+    int64_t next_poll = 0, retry = 0;
     while (true) {
         Request req;
         if (xQueueReceive(commands, &req, pdMS_TO_TICKS(10)) == pdTRUE) {
@@ -82,18 +83,20 @@ static void worker(void *) {
                 xQueueReset(commands);
                 retry = 0;
             } else {
-                const bool remote =
-                    action.type != ActionType::Hold && action.type != ActionType::ClearStats;
+                const bool remote = action.type != ActionType::Hold &&
+                                    action.type != ActionType::ClearStats &&
+                                    action.type != ActionType::PollInterval;
                 applying = remote;
                 if (remote) {
                     State pending = meter.state;
                     pending.reading = {};
                     publish(pending);
                 }
-                meter.apply(action);
+                if (!meter.apply(action))
+                    ESP_LOGW("meter", "Action failed: %s / %s", meter.state.error.c_str(),
+                             meter.state.error_detail.c_str());
                 applying = false;
                 if (remote) {
-                    last_frame = esp_timer_get_time() / 1000;
                     next_poll = 0;
                 }
             }
@@ -118,10 +121,8 @@ static void worker(void *) {
                 publish(meter.state);
                 ESP_LOGI("meter", "Serial ready; querying *IDN? before declaring connection");
                 meter.connect();
-                ESP_LOGI("meter", "Identity accepted=%d ready=%d model=%s mode=%s",
-                         meter.state.connected, meter.state.ready, profile(meter.state.model).name,
-                         meter.state.acquisition == Acquisition::AutoFetch ? "AutoFetch" : "Query");
-                last_frame = esp_timer_get_time() / 1000;
+                ESP_LOGI("meter", "Identity accepted=%d ready=%d model=%s mode=Query",
+                         meter.state.connected, meter.state.ready, profile(meter.state.model).name);
             } else {
                 auto status = UsbTransport::descriptor_status();
                 meter.state.phase = UsbTransport::phase();
@@ -134,18 +135,10 @@ static void worker(void *) {
             publish(meter.state);
             retry = now + 3000;
         }
-        if (meter.state.ready && meter.state.acquisition == Acquisition::AutoFetch) {
-            // No query, heartbeat, quiet drain or recovery command while waiting/receiving.
-            if (meter.receive(20))
-                last_frame = esp_timer_get_time() / 1000;
-            if (!meter.state.ready)
-                ESP_LOGW("meter", "Receive stopped: %s / %s", meter.state.error.c_str(),
+        if (meter.state.ready && now >= next_poll) {
+            if (!meter.poll())
+                ESP_LOGW("meter", "Query failed: %s / %s", meter.state.error.c_str(),
                          meter.state.error_detail.c_str());
-            if (meter.state.streaming && esp_timer_get_time() / 1000 - last_frame > 5000)
-                meter.stream_stale();
-            publish(meter.state);
-        } else if (meter.state.ready && now >= next_poll) {
-            meter.poll();
             publish(meter.state);
             next_poll = esp_timer_get_time() / 1000 + meter.state.poll_ms;
         }
@@ -221,6 +214,15 @@ extern "C" void app_main() {
                         (int)snapshot.phase, snapshot.connected, snapshot.ready,
                         snapshot.primary.c_str(), (unsigned long long)snapshot.stats.count,
                         snapshot.error.c_str(), snapshot.error_detail.c_str());
+                    ESP_LOGI(
+                        "meter_state",
+                        "id=%s mode=%s freq=%d level=%.1f primary=%s secondary=%s reading=%s / %s",
+                        snapshot.identity.c_str(), "Query", snapshot.hz, snapshot.level,
+                        snapshot.primary.c_str(), snapshot.secondary.c_str(),
+                        format_value(snapshot.reading.primary, primary_unit(snapshot.primary))
+                            .c_str(),
+                        format_value(snapshot.reading.secondary, secondary_unit(snapshot.secondary))
+                            .c_str());
                     ESP_LOGI("locale", "current=%s", snapshot.locale.c_str());
                     xSemaphoreGive(state_lock);
                 }

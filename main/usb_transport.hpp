@@ -30,4 +30,5 @@ class UsbTransport : public th::Transport {
     }
     static th::ConnectionPhase phase();
     static std::string descriptor_status();
+    static std::string descriptor_details();
 };

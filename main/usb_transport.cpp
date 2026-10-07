@@ -54,6 +54,15 @@ std::string UsbTransport::descriptor_status() {
                   d == 0x10c4ea60 ? " / CP210x" : "");
     return b;
 }
+std::string UsbTransport::descriptor_details() {
+    const auto d = descriptor.load();
+    if (!d)
+        return "--";
+    char text[100];
+    std::snprintf(text, sizeof(text), "VID %04X / PID %04X", (unsigned)(d >> 16),
+                  (unsigned)(d & 65535));
+    return text;
+}
 bool UsbTransport::receive(const uint8_t *data, size_t n, void *arg) {
     auto &s = *(UsbTransport *)arg;
     for (size_t i = 0; i < n; ++i)

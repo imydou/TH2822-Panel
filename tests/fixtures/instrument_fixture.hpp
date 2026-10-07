@@ -9,11 +9,12 @@ class InstrumentFixture : public th::Transport {
     mutable uint64_t clock = 0;
 
   public:
+    std::string model = "TH2822E";
     bool write(const std::string &raw) override {
         auto s = raw.substr(0, raw.find_first_of("\r\n"));
         response = "";
         if (s == "*IDN?")
-            response = "TH2822E Handheld LCR Meter,TEST-FIXTURE,NO-DEVICE";
+            response = model + " Handheld LCR Meter,TEST-FIXTURE,NO-DEVICE";
         else if (s == "FUNC:IMPA?")
             response = primary;
         else if (s == "FUNC:IMPB?")

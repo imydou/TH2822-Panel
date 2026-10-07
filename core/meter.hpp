@@ -8,7 +8,7 @@ enum class Model { Unknown, A, C, D, E };
 struct Profile {
     Model model;
     const char *name;
-    bool dcr, selectable_level, auto_fetch_documented;
+    bool dcr, selectable_level;
     int max_hz;
 };
 const Profile &profile(Model);
@@ -58,16 +58,15 @@ enum class ConnectionPhase {
     Identified,
     Unsupported
 };
-enum class Acquisition { AutoFetch, Query };
 struct State {
     Model model = Model::Unknown;
     std::string locale = "zh-CN", error_detail;
+    std::string firmware, serial, usb_info;
     std::string identity = "", primary = "", secondary = "NULL", equivalent = "", error;
     int hz = 0;
     double level = 0;
-    bool connected = false, ready = false, hold = false, streaming = false;
+    bool connected = false, ready = false, hold = false;
     ConnectionPhase phase = ConnectionPhase::Disconnected;
-    Acquisition acquisition = Acquisition::Query;
     unsigned poll_ms = 1000;
     Reading reading;
     Stats stats;
@@ -79,7 +78,7 @@ enum class ActionType {
     Frequency,
     Level,
     Equivalent,
-    Acquisition,
+    PollInterval,
     Hold,
     ClearStats,
     Resync,
@@ -117,8 +116,6 @@ class Session {
     explicit Session(Transport &t) : io(t) {}
     bool connect();
     bool poll();
-    bool receive(unsigned timeout_ms);
-    void stream_stale();
     bool apply(const Action &);
     void disconnect(const std::string &);
 };

@@ -13,6 +13,6 @@ for meta in registry['locales']:
 # Every literal semantic UI/error key in application sources must be in the fallback resource.
 for folder in ('core','main'):
  for p in (root/folder).glob('*.cpp'):
-  for key in re.findall(r'"((?:app|model|status|button|reading|control|value|menu|stats|hint|error|usb)\.[a-z_]+)"',p.read_text()):
+  for key in re.findall(r'"((?:app|model|status|button|reading|control|value|menu|stats|hint|error|usb|info|connection)\.[a-z_]+)"',p.read_text()):
    assert key in english, (p.name,key)
 print('PASS: registered locales, semantic keys and named placeholder sets')

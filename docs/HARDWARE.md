@@ -40,7 +40,7 @@ LCD/GT911没有占用USB19/20，UART0也独立，因此外围总线能并行。�
 
 ## USB串口选择
 
-TH2822资料只保证虚拟串口，未保证全系列芯片一致。参考CLI实测为CP2102 `10c4:ea60`。本固件使用乐鑫 `usb_host_cp210x_vcp` C API（底层借用CDC Host传输层，不按CDC类请求控制CP210x）。枚举时打印完整VID/PID和设备/配置描述符；仅接受该VID/PID与interface0的bulk endpoints。未知芯片显示unsupported，需提供实际描述符扩展驱动，不能凭型号名称猜CDC。
+TH2822资料只保证虚拟串口，未保证全系列芯片一致。参考CLI实测为CP2102 `10c4:ea60`。2026-10-07本项目连接的TH2822E VER4.5.2307也实际枚举为`10c4:ea60`，接口0与bulk81/01；不推广到全系列。本固件使用乐鑫 `usb_host_cp210x_vcp` C API（底层借用CDC Host传输层，不按CDC类请求控制CP210x）。枚举时打印完整VID/PID和设备/配置描述符；仅接受该VID/PID与interface0的bulk endpoints。未知芯片显示unsupported，需提供实际描述符扩展驱动，不能凭型号名称猜CDC。
 
 9600/8N1；依据Silicon Labs [AN571 rev0.4](https://www.silabs.com/documents/public/application-notes/AN571.pdf) SET_FLOW禁用硬件和软件流控，保持DTR/RTS。此为串口桥临时配置，不写仪表校准或CP210x持久配置。DTR需求在全系仍待验证。
 

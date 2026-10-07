@@ -18,6 +18,7 @@ struct Fake : Transport {
         return healthy_flag;
     }
     bool write(const std::string &s) override {
+        assert(!s.empty() && s.back() == '\n' && s.find('\r') == std::string::npos);
         writes.push_back(s);
         return true;
     }
@@ -45,7 +46,7 @@ static void connected(Fake &f, Session &s, const std::string &model = "TH2822D",
         f.answers.push_back("0.6V");
     assert(s.connect());
     assert(s.state.ready);
-    s.state.acquisition = Acquisition::Query;
+    assert(s.state.firmware == version && s.state.serial == "SN123");
 }
 static void poll_answers(Fake &f, const Session &s, std::initializer_list<std::string> readings) {
     f.answers = {s.state.primary};
@@ -132,8 +133,8 @@ int main() {
         assert(f.writes.size() == n);
         poll_answers(f, s, {"TIMEOUT", "1e-6,0.01,N"});
         assert(s.poll());
-        assert(f.writes[f.writes.size() - 1] == "FETCh?\r\n" &&
-               f.writes[f.writes.size() - 2] == "FETCh?\r\n");
+        assert(f.writes[f.writes.size() - 1] == "FETCh?\n" &&
+               f.writes[f.writes.size() - 2] == "FETCh?\n");
         assert(s.state.stats.count == 1);
         s.apply({ActionType::Hold, ""});
         poll_answers(f, s, {"2e-6,0.02,N"});
@@ -165,7 +166,7 @@ int main() {
         assert(!s.state.ready && s.state.reading.primary.status == Value::Invalid);
         unsigned setters = 0;
         for (auto &w : f.writes)
-            if (w == "FREQ 100\r\n")
+            if (w == "FREQ 100\n")
                 ++setters;
         assert(setters == 1);
     }
@@ -232,39 +233,19 @@ int main() {
         InstrumentFixture t;
         Session s(t);
         assert(s.connect());
-        s.state.acquisition = Acquisition::Query;
         assert(s.poll());
         assert(s.state.model == Model::E);
         assert(s.apply({ActionType::Primary, "DCR"}));
         assert(s.poll());
     }
-    {
+    { // A stream already active before connection must not masquerade as IDN.
         Fake f;
         Session s(f);
         f.answers = {"1e-6,0.1,N", "TH2822E Handheld LCR Meter,V1.2,SN", "C", "D", "SER", "1000",
                      "0.6"};
-        assert(s.connect());
-        assert(s.state.connected && s.state.phase == ConnectionPhase::Identified);
-        assert(s.state.acquisition == Acquisition::AutoFetch);
-        assert(!s.poll()); // No accidental query can terminate the active mode.
-        const auto writes = f.writes.size();
-        f.answers = {"2e-6,0.02,N", "3e-6,0.03,+1"};
-        assert(s.receive(20) && s.receive(20));
-        assert(s.state.streaming && s.state.stats.count == 2);
-        assert(f.writes.size() == writes);
-        assert(!s.receive(20));
-        s.stream_stale();
-        assert(s.state.connected && s.state.ready && !s.state.streaming);
-        assert(s.state.reading.primary.status == Value::Invalid);
-        assert(f.writes.size() == writes);
-        f.answers = {"4e-6,0.04,N"};
-        assert(s.receive(20));
-        assert(s.apply({ActionType::Hold, ""}));
-        f.answers = {"5e-6,0.05,N"};
-        assert(s.receive(20) && s.state.reading.primary.number == 4e-6);
-        assert(f.writes.size() == writes);
-        f.answers = {"1000,N"}; // DCR-shaped data cannot keep cached C units.
-        assert(!s.receive(20) && !s.state.ready && s.state.connected);
+        assert(s.connect() && s.state.ready && s.state.connected);
+        poll_answers(f, s, {"2e-6,0.02,N"});
+        assert(s.poll() && s.state.reading.primary.number == 2e-6);
     }
     for (const auto &id : {"TH2822E,,SN", "TH2822E,V,", "TH2822E,V,SN,extra", "OTHER,V,SN",
                            "TH2822,V,SN", "TH2822 Handheld LCR Meter,V,SN"}) {
@@ -273,35 +254,6 @@ int main() {
         f.answers = {id};
         assert(!s.connect() && !s.state.connected && !s.state.ready);
         assert(f.writes.size() == 1);
-    }
-    for (const auto &name : {"TH2822A", "TH2822C"}) {
-        Fake f;
-        Session s(f);
-        f.answers = {std::string(name) + ",V1,SN", "C", "D", "SER", "1000"};
-        assert(s.connect() && s.state.connected && s.state.ready);
-        assert(s.state.acquisition == Acquisition::AutoFetch);
-        assert(profile(s.state.model).auto_fetch_documented);
-        assert(s.state.level == 0.6);
-        const auto writes = f.writes.size();
-        f.answers = {"1e-6,0.01,N"};
-        assert(s.receive(20));
-        assert(f.writes.size() == writes);
-        assert(!s.apply({ActionType::Primary, "DCR"}));
-        assert(!s.apply({ActionType::Level, "0.3"}));
-        assert(f.writes.size() == writes);
-    }
-    {
-        Fake f;
-        Session s(f);
-        connected(f, s, "TH2822E");
-        s.state.acquisition = Acquisition::AutoFetch;
-        f.answers = {"1,2,N", "100kHz", "C", "D", "SER", "100kHz", "0.6V"};
-        assert(s.apply({ActionType::Frequency, "100000"}));
-        assert(s.state.ready && !s.state.streaming && s.state.hz == 100000);
-        const auto n = f.writes.size();
-        for (unsigned i = 0; i < 20; ++i)
-            assert(!s.receive(20));
-        assert(f.writes.size() == n); // Waiting never polls or tries to re-enable itself.
     }
     {
         Fake f;
@@ -313,8 +265,52 @@ int main() {
         assert(!s.apply({ActionType::Primary, "C"}));
         assert(f.writes.size() == 1);
     }
+    // Default touch-only flow: set/readback and the next poll need no Resync/RMT.
+    for (const auto &name : {"TH2822A", "TH2822C", "TH2822D", "TH2822E"}) {
+        InstrumentFixture t;
+        t.model = name;
+        Session s(t);
+        assert(s.connect());
+        assert(s.poll() && s.state.sample_sequence == 1);
+        assert(s.apply({ActionType::Frequency, "100"}));
+        assert(s.state.ready && s.state.hz == 100);
+        assert(s.state.reading.primary.status == Value::Invalid);
+        assert(s.poll() && s.state.reading.primary.status == Value::Valid);
+        assert(s.state.stats.count == 1);
+        assert(s.apply({ActionType::PollInterval, "500"}) && s.state.poll_ms == 500);
+        assert(!s.apply({ActionType::PollInterval, "auto"}));
+        assert(!s.apply({ActionType::PollInterval, "0"}));
+        assert(s.state.stats.count == 1);
+        s.disconnect("test");
+        assert(s.connect());
+    }
+    // Real E incident: truncated response must remain an error, never guessed as 0.6V.
+    {
+        Fake f;
+        Session s(f);
+        connected(f, s, "TH2822E");
+        f.answers = {"C", "NULL", "SER", "1000", "0."};
+        assert(!s.poll() && !s.state.ready);
+        assert(s.state.error == "error.level");
+        assert(s.state.error_detail == "VOLT? => [0.]");
+        assert(s.state.reading.primary.status == Value::Invalid);
+        auto n = f.writes.size();
+        assert(!s.poll() && f.writes.size() == n);
+    }
+    for (const auto &field : {"secondary", "equivalent"}) {
+        Fake f;
+        Session s(f);
+        connected(f, s, "TH2822E");
+        f.answers = {"C"};
+        if (std::string(field) == "equivalent")
+            f.answers.push_back("D");
+        f.answers.push_back("TRUNCATED");
+        assert(!s.poll() && !s.state.ready);
+        assert(s.state.error == std::string("error.") + field);
+        assert(s.state.error_detail.find("TRUNCATED") != std::string::npos);
+    }
     std::cout
         << "PASS: capabilities, strict parsing, framing, overflow, state gating, DCR, readback, "
            "secondary reset, query retry, setter no-retry, hold/stats, disconnect, identity "
-           "gating, Auto Fetch demux, no background writes\n";
+           "gating, stale-frame demux, touch-only setting/poll flow\n";
 }

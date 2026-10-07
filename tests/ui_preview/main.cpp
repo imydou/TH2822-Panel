@@ -3,6 +3,7 @@
 #include "lvgl.h"
 #include "ui.hpp"
 #include <SDL.h>
+#include <cassert>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -32,6 +33,22 @@ static void screenshot(const std::string &file) {
                                (unsigned char)((c & 31) * 255 / 31)};
         f.write((char *)rgb, 3);
     }
+}
+static lv_obj_t *find_button(lv_obj_t *parent, const char *text) {
+    for (unsigned i = 0; i < lv_obj_get_child_cnt(parent); ++i) {
+        auto *o = lv_obj_get_child(parent, i);
+        if (lv_obj_check_type(o, &lv_btn_class) && lv_obj_get_child_cnt(o) &&
+            std::string(lv_label_get_text(lv_obj_get_child(o, 0))) == text)
+            return o;
+        if (auto *found = find_button(o, text))
+            return found;
+    }
+    return nullptr;
+}
+static void click(const char *key) {
+    auto *b = find_button(lv_scr_act(), i18n::text(key));
+    assert(b);
+    lv_event_send(b, LV_EVENT_CLICKED, nullptr);
 }
 int main(int argc, char **argv) {
     bool headless = argc > 1 && std::string(argv[1]) == "--capture";
@@ -71,6 +88,7 @@ int main(int argc, char **argv) {
     offline.locale = locale;
     session.connect();
     session.state.locale = locale;
+    session.state.usb_info = "VID 10C4 / PID EA60 (TEST FIXTURE)";
     th::State *shown = &offline;
     panel_ui_create([&](th::Action a) {
         if (a.type == th::ActionType::Language) {
@@ -96,15 +114,15 @@ int main(int argc, char **argv) {
                     down = false;
             }
         }
-        if (ticks % 50 == 0)
+        if (ticks % 5 == 0)
             panel_ui_update(*shown);
         static lv_obj_t *test_mark = nullptr;
         if (!test_mark) {
-            test_mark = lv_label_create(lv_scr_act());
+            test_mark = lv_label_create(lv_layer_top());
             lv_label_set_text(test_mark, "TEST INPUT / NO INSTRUMENT");
             lv_obj_set_style_text_font(test_mark, &lv_font_montserrat_14, 0);
             lv_obj_set_style_text_color(test_mark, lv_color_hex(0xffbf69), 0);
-            lv_obj_set_pos(test_mark, 260, 22);
+            lv_obj_set_pos(test_mark, 260, 0);
         }
         lv_tick_inc(10);
         lv_timer_handler();
@@ -116,35 +134,53 @@ int main(int argc, char **argv) {
         }
         if (headless) {
             if (ticks == 20) {
+                assert(!find_button(lv_scr_act(), i18n::text("button.hold")));
                 screenshot(dest + "-offline.ppm");
+                offline.phase = th::ConnectionPhase::Identifying;
+            }
+            if (ticks == 40) {
+                screenshot(dest + "-identifying.ppm");
                 shown = &session.state;
             }
-            if (ticks == 100)
-                screenshot(dest + "-await-stream.ppm");
-            if (ticks == 110) {
-                session.state.streaming = true;
-                session.state.reading = {{th::Value::Valid, 6.8e-6}, {th::Value::Valid, 0.01}, "N"};
-                ++session.state.sample_sequence;
+            if (ticks == 70) {
+                assert(find_button(lv_scr_act(), i18n::text("button.info")));
+                assert(lv_obj_has_flag(find_button(lv_scr_act(), i18n::text("button.sync")),
+                                       LV_OBJ_FLAG_HIDDEN));
+                screenshot(dest + "-connected.ppm");
+                session.poll();
             }
-            if (ticks == 180)
-                screenshot(dest + "-stream-fixture.ppm");
-            if (ticks == 190) {
+            if (ticks == 100) {
+                screenshot(dest + "-reading-fixture.ppm");
+                click("button.info");
+            }
+            if (ticks == 120) {
+                screenshot(dest + "-info.ppm");
+                click("button.cancel");
+                click("button.guide");
+            }
+            if (ticks == 140) {
+                screenshot(dest + "-guide.ppm");
+                click("button.cancel");
+                session.state.ready = false;
+                session.state.reading = {};
+                session.state.error = "error.equivalent";
+                session.state.error_detail = "FUNC:EQU? => [TEST-BAD]";
+            }
+            if (ticks == 160) {
+                assert(!lv_obj_has_flag(find_button(lv_scr_act(), i18n::text("button.sync")),
+                                        LV_OBJ_FLAG_HIDDEN));
+                screenshot(dest + "-error.ppm");
+                click("button.info");
                 shown = &offline;
+                offline.phase = th::ConnectionPhase::Disconnected;
                 offline.error = "usb.unplugged";
             }
-            if (ticks == 250) {
+            if (ticks == 180) {
+                assert(!find_button(lv_scr_act(), i18n::text("button.hold")));
+                assert(!find_button(lv_scr_act(), i18n::text("button.info")));
                 screenshot(dest + "-disconnect.ppm");
+                quit = true;
             }
-            if (ticks == 260) {
-                for (unsigned i=0; i<lv_obj_get_child_cnt(lv_scr_act()); ++i) {
-                    auto *o=lv_obj_get_child(lv_scr_act(),i);
-                    if (lv_obj_check_type(o,&lv_btn_class) && lv_obj_get_child_cnt(o) &&
-                        std::string(lv_label_get_text(lv_obj_get_child(o,0))) == i18n::text("button.guide")) {
-                        lv_event_send(o,LV_EVENT_CLICKED,nullptr); break;
-                    }
-                }
-            }
-            if (ticks == 300) { screenshot(dest + "-guide.ppm"); quit = true; }
         }
         ++ticks;
     }

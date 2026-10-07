@@ -22,7 +22,7 @@ for source, target in outputs.items():
 manifest = {'version': version, 'target': meta['target'], 'idf': meta['git_revision'],
  'flash_mode': 'dio', 'flash_frequency': '80m', 'flash_size': '16MB',
  'images': {'0x0': 'bootloader.bin', '0x8000': 'partition-table.bin', '0x10000': 'th2822_panel.bin'},
- 'hardware_status': 'See docs/VALIDATION.md. No TH2822 end-to-end instrument test yet.'}
+ 'hardware_status': 'See docs/VALIDATION.md for TH2822E observations and unverified model/firmware coverage.'}
 (destination/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
 files = [root/name for name in ['CMakeLists.txt','sdkconfig','sdkconfig.defaults','dependencies.lock','README.md','THIRD_PARTY_NOTICES.md','.gitignore']]
 for directory in ['main','core','tests','scripts','resources','licenses','docs','fonts']:
