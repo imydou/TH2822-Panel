@@ -40,7 +40,7 @@ DCR仅D/E启用，并禁用频率、电平、等效电路、副参数设置及IM
 
 其TH2822D VER4.5.2307、CP2102 10c4:ea60记录仅属于该项目。800ms setter等待仅匹配该D身份；其他型号/固件使用1200ms保守初值，仍待实测。SLOW丢指令、DTR/HUPCL、副参数重置不能视为全系实测。嵌入式保持USB串口打开，没有POSIX HUPCL。
 
-E10/E11/E12显示在仪表LCD，不虚构SYST:ERR?等错误队列。本项目不执行仪表RATE、AUTO LCR、OPEN/SHORT、校准、上电记忆、恢复出厂、容差或内部REC操作。
+E10/E11/E12显示在仪表LCD，不虚构SYST:ERR?等错误队列。正式固件不执行仪表RATE、AUTO LCR、OPEN/SHORT、校准、上电记忆、恢复出厂、容差或内部REC操作。
 
 ## 原生AUTO LCR调查（2026-10-07）
 
@@ -80,3 +80,26 @@ E10/E11/E12显示在仪表LCD，不虚构SYST:ERR?等错误队列。本项目不
 再试6个独立状态查询：`FUNC:AUTO?`、`FUNC:IMPA:AUTO?`、`FUNC:AUTO:STAT?`、`FUNC:IMPA:MODE?`、`FUNC:MODE?`、`AUTO?`，均在2500ms内未收到响应，每次建立1200ms有限静默后继续。前后FUNC:IMPA?与FETCh?均正常。这只说明本轮未得到可用状态接口，不能证明不存在其他未公开指令。
 
 结论：可以在仪表原本已启用AUTO时读取当前参数和数值，但尚无经过确认的远程AUTO开启/关闭/状态命令。产品没有新增AUTO选项或替代算法。FETCH不携带参数类型，变化中的自动识别读数与类型如何严格对应仍需后续核实，不能把普通参数快照当作独立AUTO状态。正式源码不保留诊断入口，原始日志及临时源仅在本地references/auto-probe与references/auto-readonly，排除Git。
+
+
+## 本机直连AUTO与RATE排查（2026-10-07）
+
+用户改为TH2822E直接接Mac，授权串口测试并要求联网搜索。仅访问`/dev/cu.usbserial-0001`（CP2102 10c4:ea60），未打开开发板UART或烧录。9600 8N1、无流控、单LF、DTR/RTS保持、关闭HUPCL、独占打开；每组精确核对同一E VER4.5.2307及序列号。
+
+用户确认基线为AUTO亮、SLOW。正常查询返回C/NULL/PAL/1kHz/0.6V和有效三字段FETCH。只读候选每条等待2500ms，前置接收窗口1200ms，记录原始字节和UTC；每组前后IDN及组后FETCH正常。以下18条均无响应，不将其直接等同于LCD E10：
+
+| 组 | 候选查询 |
+|---|---|
+| 速度1 | `RATE?`、`SPEED?`、`FUNC:RATE?`、`FUNC:SPEED?`、`MEAS:RATE?`、`SENS:RATE?` |
+| 速度2 | `FUNC:APER?`、`APER?`、`FUNC:APERture?`、`SENSe:APERture?`、`MEASure:RATE?`、`SENSe:SPEEd?` |
+| AUTO新增 | `AUTO:STAT?`、`FUNC:IMPA:AUTO:STAT?`、`FUNC:LCR:AUTO?`、`FUNC:LCR?`、`FUNC:IMPA:SEL?`、`FUNC:IMPA:RANG:AUTO?` |
+
+单独发送`RATE FAST`后停止发令，串口无响应；用户明确观察：仍SLOW、有滴声、LCD E10、AUTO亮。这条设置命令在本台固件上被作为未知命令拒绝，无需继续盲试同一根命令的SLOW/数字参数。随后单独发送`FUNC:RATE FAST`，串口同样无响应；用户再次确认SLOW、E10、AUTO亮。两条速度setter均有本机LCD拒绝证据，最后状态仍AUTO/SLOW，已关闭串口且不再发令。
+
+联网重新核对GitHub最新main仍为e935bd9895c4bb0e667308bae22126edd549e199，公开issues列表为空。其[命令目录](https://github.com/LHX369963/th2822d-cli/blob/main/docs/protocol/catalog.md)无AUTO/RATE入口；[monitor说明](https://github.com/LHX369963/th2822d-cli/blob/main/docs/usage/monitor.md)明确轮询不修改仪表RATE；[Windows对应说明](https://github.com/LHX369963/th2822d-cli/blob/main/docs/windows-parity.md)仅分析LCR Software 2.0.0，不能据此断言其他版本没有隐藏命令。
+
+同惠英文产品/下载页403，但此次中文官网可访问。[TH2822软件搜索页](https://www.tonghui.com.cn/services_software.html?title=TH2822)列出“TH2822上位机软件3.0.1”（条目69）。按页面公开下载按钮请求`POST /wapi/downloadFile`、ptype=3/pid=69/sign=0，返回code40000、success=false、要求登录；没有取得软件文件，未绕过登录、未执行安装包。此为新可追踪线索，不证明3.0.1具备AUTO或速度控制；需用户提供从官网正常下载的原包才能静态检查。
+
+D/E V1.0.0印刷42–44页描述AUTO及FAST/SLOW的面板操作，90–99页完整通信命令和错误码未列它们的远程控制。需要的是补充远程协议，不是缺少面板功能说明。具体缺口：AUTO开/关/状态、FAST/SLOW设置/查询，以及AUTO切换类型时如何与FETCH数据对应。没有找到有效指令前，不在正式固件添加假控制或用轮询速度冒充仪表速度。
+
+原始记录与临时固定候选脚本保存在本地`references/direct-serial/`，不纳入固件或发布包；未做校准、复位、上电记忆或保存设置。本次无产品代码修改，未重新构建或烧录。
