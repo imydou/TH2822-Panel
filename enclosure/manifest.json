@@ -1,0 +1,168 @@
+{
+  "version": "R9",
+  "archive_date_Asia_Shanghai": "2026-10-07",
+  "files": [
+    {
+      "path": "cad/R9_G20_editable_with_reference.f3d",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_editable_with_reference.f3d",
+      "bytes": 15205086,
+      "sha256": "50b0efef64b0d6713fa3b276eb5b366a69e23ae46348c2ec4e87a0674ca59b74"
+    },
+    {
+      "path": "cad/R9_G20_button_1_RIGHT_TF.f3d",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_button_1_RIGHT_TF.f3d",
+      "bytes": 300469,
+      "sha256": "b82269e90fd494ef44fb5aedddbab338149e46e7cbf49b984dc41d3abfa3bb6f"
+    },
+    {
+      "path": "cad/R9_G20_button_2_LEFT_USB.f3d",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_button_2_LEFT_USB.f3d",
+      "bytes": 297838,
+      "sha256": "c2c067bfa0d9127506981fd92bc936bb89003ec58e1fd91a40056c58660b578f"
+    },
+    {
+      "path": "cad/R9_G20_button_1_RIGHT_TF.step",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_button_1_RIGHT_TF.step",
+      "bytes": 87112,
+      "sha256": "0ce4c77383770323c18b7bb173bf1abedb1b0a403e86a0866b6f35adc9ef38ef"
+    },
+    {
+      "path": "cad/R9_G20_button_2_LEFT_USB.step",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_button_2_LEFT_USB.step",
+      "bytes": 75786,
+      "sha256": "fd66a3734e66c360775100dd8620091aa44de10d5293f18cc329802d9f806f36"
+    },
+    {
+      "path": "cad/R9_G20_button_1_RIGHT_TF.stl",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_button_1_RIGHT_TF.stl",
+      "bytes": 12284,
+      "sha256": "038e54071f4b10a909047ad350b02a34395cf81a4811b6ee942832d5a2e17242"
+    },
+    {
+      "path": "cad/R9_G20_button_2_LEFT_USB.stl",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_G20_button_2_LEFT_USB.stl",
+      "bytes": 10884,
+      "sha256": "96b6b6692060e8ae50a01271ecd1521bf5a23c19bc4a2f5661c829898b9afec5"
+    },
+    {
+      "path": "cad/R9_main_shell_unchanged.f3d",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task/R6_work/final/R6_main_shell.f3d",
+      "bytes": 705237,
+      "sha256": "5c3d6883375c15c1826693e412a4a661a8a5a5ce77bb82873d53df2fceaf4f4d"
+    },
+    {
+      "path": "cad/R9_main_shell_unchanged.step",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task/R6_work/final/R6_main_shell.step",
+      "bytes": 209170,
+      "sha256": "45255bb45e0ddf01e4b01e04247082f03eb4f9941a34f13d94d3be3b6da7297f"
+    },
+    {
+      "path": "print/R9_complete_shell_and_buttons.3mf",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/delivery/R9_complete_shell_and_buttons.3mf",
+      "bytes": 409866,
+      "sha256": "16b44fb77f1b2c6c03d627a1cc1798c81bc050fd7e39e2c0af41993163dabc07"
+    },
+    {
+      "path": "print/stl/R9_main_shell_PRINT.stl",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_main_shell_PRINT.stl",
+      "bytes": 129084,
+      "sha256": "74bfbbb39a62b90ff02d82438a99e36698fb8222a6f095061e63dbcfe64c236d"
+    },
+    {
+      "path": "print/stl/R9_G20_button_1_RIGHT_TF_FACE_DOWN.stl",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/slicing/R9_G20_button_1_RIGHT_TF_FACE_DOWN.stl",
+      "bytes": 12284,
+      "sha256": "a04babdd632a6d95391a8ebad36ba2ad3049b6467486ed6d299c9b4a65c71a77"
+    },
+    {
+      "path": "print/stl/R9_G20_button_2_LEFT_USB_FACE_DOWN.stl",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/slicing/R9_G20_button_2_LEFT_USB_FACE_DOWN.stl",
+      "bytes": 10884,
+      "sha256": "5793fc9027543a13810154c319aefdc0cfbc25c6ffdd408eaf43cdc334eeecff"
+    },
+    {
+      "path": "print/profiles/filament.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/profiles/filament.json",
+      "bytes": 7379,
+      "sha256": "4b29a1ac2bf82b9a8db4fcd43fc9549a7362e7c5948ecde7048a959262c4c87d"
+    },
+    {
+      "path": "print/profiles/machine.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/profiles/machine.json",
+      "bytes": 20248,
+      "sha256": "5fc0cd32fb0f4118269e503311e23d8e434d0bb49a8f832fa93e036810b75896"
+    },
+    {
+      "path": "print/profiles/process.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/profiles/process.json",
+      "bytes": 7940,
+      "sha256": "f6b80cdaafb8b5b6d50026afaf8837b2e6e6bccdcbad1f08443c2db0e56d4fce"
+    },
+    {
+      "path": "verification/R9_build.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_build.json",
+      "bytes": 3476,
+      "sha256": "74275a26fd7d70ab5da041f54e00e505c0d025ac6184a16a4b809b8da8d5aeb5"
+    },
+    {
+      "path": "verification/R9_validation.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/candidate/R9_validation.json",
+      "bytes": 328151,
+      "sha256": "d0bf7b23fe1516fc5a46a976e886229a22bb64fe71b4c193f95e51a975e3cea5"
+    },
+    {
+      "path": "verification/R9_final_verification.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/delivery/R9_final_verification.json",
+      "bytes": 1740,
+      "sha256": "5b7a6af812ca91b707639c5b2b6f7a7ed6de85199a974b7853d0e34eab382aef"
+    },
+    {
+      "path": "verification/R9_说明与打印状态.txt",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/delivery/R9_说明与打印状态.txt",
+      "bytes": 3580,
+      "sha256": "379a79eb4791a361988b510e21b30ec4b9058c30e714cf88f087be11ffd9ab68"
+    },
+    {
+      "path": "verification/R9_complete_toolpath_review.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_complete_shell_and_buttons/R9_complete_toolpath_review.json",
+      "bytes": 32150,
+      "sha256": "73947fab25b790b8c1f38236e52aaa86190d4ad5d168e18ce74111b71c4f747d"
+    },
+    {
+      "path": "verification/R9_neck_actual_toolpaths.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_complete_shell_and_buttons/R9_neck_actual_toolpaths.json",
+      "bytes": 9831,
+      "sha256": "a7ae307f621548caeeabecb7f5d9f087d99d2dbd5550a11868d7d0e1a896064e"
+    },
+    {
+      "path": "verification/result.json",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_complete_shell_and_buttons/result.json",
+      "bytes": 4905,
+      "sha256": "eddea41bc2d742b8efd6992238d82ed891c69e0768981be277f6738ccdd54e1d"
+    },
+    {
+      "path": "verification/button1_actual_layers.svg",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_complete_shell_and_buttons/button1_actual_layers.svg",
+      "bytes": 81501,
+      "sha256": "a68fe40edb23089fdeee23eed4c98f2d3f07a94a4ca1885f44bde5f4c8a11268"
+    },
+    {
+      "path": "verification/button2_actual_layers.svg",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_complete_shell_and_buttons/button2_actual_layers.svg",
+      "bytes": 79473,
+      "sha256": "1f01d04bfdce74cf002dd9ba022d8fcb3d45a770e503b517444e9dc14041a72d"
+    },
+    {
+      "path": "verification/TF_actual_layers.svg",
+      "source": "/Users/liu/Documents/Codex/2026-10-04/task-3/R9_work/complete/R9_complete_shell_and_buttons/TF_actual_layers.svg",
+      "bytes": 42209,
+      "sha256": "5e9ececa74ccb1da48bfcdf8bacf79ca3516e4cc2b259906063a6048b8c06499"
+    },
+    {
+      "path": "README.txt",
+      "source": "archive index created for this destination",
+      "bytes": 2148,
+      "sha256": "3748ed960919a2f617f173e2284f7e7025c20ecf87212f2ed43bfcda1f015db2"
+    }
+  ]
+}

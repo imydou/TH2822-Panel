@@ -1,71 +1,182 @@
-# TH2822 Series Touch Panel
+# TH2822-Panel
 
-ESP32-S3 原生 USB Host 触摸控制面板，面向 **TH2822 系列**。指定硬件为 **Waveshare ESP32-S3-Touch-LCD-4.3（非 B/C）**，800×480、ESP-IDF5.4.4、LVGL8.4。默认中文，可扩展多语言、保存语言偏好。
+为同惠 **TH2822 系列手持 LCR 仪表**制作的独立触摸面板。使用微雪 **ESP32-S3-Touch-LCD-4.3**，通过原生 USB Host 连接仪表，在 4.3 英寸屏幕上查看读数、设置测量参数、使用仪表原生容差比较和统计记录。运行时不需要电脑上位机。
 
-**当前版本 0.4.9：常规测量 / 容差比较。** 比较期间锁定主副参数、频率和电平，进入比较或重新取基准需确认；串并联和容差档位仍可调。精简信息页与独立通信记录见[模式说明](docs/MODES.md)。原生偏差直接查询仪表，不做本地或副参数比较。
+仓库包含 ESP32 固件、协议与界面测试，以及配套的 **R9 可打印外壳**。当前固件版本为 **0.4.9**，默认中文，支持切换英文并保存语言偏好。
 
-参数设置后读回并继续测量，无需操作仪表RMT。未连接时显示独立连接页，没有模拟读数、主动上报模式或未公开AUTO控制。已实测的TH2822E范围见[验收记录](docs/VALIDATION.md)，不扩大为全系列通过。关于本台E远程电平设置导致原生偏差停滞的证据见[直连对照](docs/TOL_DIRECT_TEST.md)；模式保护避开该触发条件，不宣称修复仪表内部固件。
+> 当前实机验证对象为 TH2822E / VER4.5.2307。TH2822A、C、D 已按文档建立能力配置并做主机测试，尚未完成本项目实机联调；不能将其视为已验证兼容。
 
-## 功能
+## 可以做什么
 
-- CP210x专用USB Host驱动，按已知10c4:ea60/interface0选择；不将CP210x冒充通用CDC-ACM。
-- 区分USB枚举、串口就绪、查询身份和已识别仪表；`*IDN?`自动映射能力，未知或不完整身份拒绝连接。
-- A/C/D/E均使用自动查询采集，间隔可选250/333/500/667/1000ms（默认500ms）；这是完成一轮后的间隔，不是仪表测量速度。
-- 未连接页面显示连接进度、错误、语言、重连和通信记录入口；右上角仪表信息只显示真实型号、版本、序列号。
-- 正式支持范围为TH2822A/C/D/E四个型号；仅返回TH2822系列名时提示型号不明确，拒绝建立仪表连接，不推断为任一型号。
-- 主副读数、单位、OL/无效状态；L/C/R/Z，D/E的DCR；频率/电平按型号门控，C/E含100kHz。
-- 设置通过单队列发送并读回验证；查询最多重试一次，设置不自动重放；错误可见，热插拔重连。
-- 本地保持；原生 REC 默认当前值；最大/平均/最小按需读回，避免后台查询不断鸣叫。不计算本地统计，通信证据和限制见 [REC_TIMING.md](docs/REC_TIMING.md)。
-- 不执行校准、永久设置、未公开的自动LCR控制。仪表RATE需在仪表面板操作。
+| 功能 | 使用方式 |
+| --- | --- |
+| 常规测量 | 大号主、副读数，显示单位、超量程与无效状态；支持主参数、频率、电平、串并联及副参数设置，选项按机型和当前状态开放 |
+| 容差比较 | 使用仪表原生 TOL 基准和偏差，提供 1%、5%、10%、20% 档位；超限红色提示，范围内绿色提示 |
+| 统计记录 | 使用仪表原生 REC；默认查看当前值，按需查看主参数最大值、平均值、最小值，不在面板重新累计统计 |
+| 保持与刷新 | 本地冻结主界面读数；查询间隔默认 500 ms，可选 250 / 333 / 500 / 667 / 1000 ms |
+| 连接与恢复 | 独立未连接页面、自动识别型号、热插拔重连；错误浮层提供恢复操作，连接恢复后自动收起 |
+| 设备信息与诊断 | 查看真实型号、固件版本、序列号；独立通信记录页查看近期命令收发与错误 |
 
-## 使用
+设置通过单一命令队列执行并读回确认，之后自动继续取数，不需要点击同步或操作仪表 RMT。型号右侧圆点在发送设置时闪红色、查询时闪蓝色。生产固件不显示模拟读数。
 
-1. UART Type-C负责供电/调试，原生USB Type-C通过确认过的OTG线接仪表；先阅读[接线条件](docs/HARDWARE.md)。
-2. 上电或热插入后自动查询身份及设置。USB已枚举不代表仪表已连接。
-3. 身份和设置确认后自动查询读数；主界面修改参数，等待自动读回确认即可继续采集。
-4. 正常状态不显示同步按钮；失败时显示具体错误和“重新读回”，不重发不确定的设置命令。
-5. 点击“仪表信息”查看型号、版本、序列号；通信记录独立显示收发，查看页面不额外发命令；USB断开立即返回独立连接页。
+## 硬件与接线
 
-仪表保持远程控制，使用触摸屏操作；不提供主动上报/RMT流程。详见[查询采集交互](docs/ACQUISITION.md)。
+指定开发板为 **Waveshare ESP32-S3-Touch-LCD-4.3，非 B/C 型号**：
 
-## 构建与验证
+- 800 × 480 RGB 屏幕、GT911 电容触摸。
+- ESP32-S3、16 MB Flash、8 MB PSRAM。
+- CH422G 扩展、FSUSB42 USB/CAN 数据复用、CH343P 调试串口。
+- 默认横屏；提供 180° 配置但尚待实屏方向与触摸验收，不提供 90°/270° 布局。
+
+```text
+电脑或稳定 5 V 电源
+        │
+        └── UART Type-C ── 微雪开发板（供电、烧录、调试）
+                              │
+                         原生 USB Type-C
+                              │
+                     USB 2.0 OTG 数据转接
+                              │
+                       TH2822 仪表 USB
+```
+
+UART 口和原生 USB 口职责不同，可同时用于板卡供电调试与仪表通信。当前驱动接收 CP210x `10c4:ea60`、interface 0，串口为 9600 / 8N1；不将仪表虚拟串口当作通用 CDC-ACM。
+
+**线材与供电需要匹配该板设计。** 原生 Type-C 没有完整的 USB-C 源端角色控制，不能假设任意 C-C 线可用。接线方案为 C 插头转 USB-A 母座的 USB 2.0 OTG 数据转接，再接仪表对应的数据线；仪表按其手册独立供电。不要把原生口接到另一台 USB Host，或通过外部电源/Hub 并联回灌。
+
+板级引脚、USB/CAN 选择、VBUS 路径和上电检查见 [硬件说明](docs/HARDWARE.md)。已有通信实测不等于完成 VBUS 限流及回灌测试。
+
+## 型号能力
+
+以下为文档及代码中的能力配置。实际可选项还受 DCR、TOL、REC 等状态限制。
+
+| 型号 | 测试频率 | 测试电平 | 主参数 | 本项目实机状态 |
+| --- | --- | --- | --- | --- |
+| TH2822A | 100 Hz、120 Hz、1 kHz、10 kHz | 固定 0.6 V | L / C / R / Z | 待联调 |
+| TH2822C | 100 Hz、120 Hz、1 kHz、10 kHz、100 kHz | 固定 0.6 V | L / C / R / Z | 待联调 |
+| TH2822D | 100 Hz、120 Hz、1 kHz、10 kHz | 0.3 / 0.6 / 1.0 V | L / C / R / Z / DCR | 待联调 |
+| TH2822E | 100 Hz、120 Hz、1 kHz、10 kHz、100 kHz | 0.3 / 0.6 / 1.0 V | L / C / R / Z / DCR | VER4.5.2307 已做通信及部分交互验证 |
+
+副参数显示为 **D / Q / θ / ESR**，具体组合以仪表实际读回为准。DCR 下禁用不适用的交流测量选项。仅返回“TH2822”、未知后缀或不完整身份时，不猜测机型，不启用操作。
+
+完整来源与测试边界见 [系列支持说明](docs/SUPPORT.md) 和 [验收记录](docs/VALIDATION.md)。
+
+## 日常操作
+
+### 常规测量
+
+连接后先显示识别状态，取得有效身份和设置后进入主界面。点击参数选择新值，等待读回确认后继续测量。第三行依次为 **刷新 / 统计记录 / 保持**。
+
+“刷新”调整查询间隔，不控制仪表 FAST/SLOW。间隔是在一轮查询完成后计时，实际读数更新周期还包含仪表响应时间；设置期间需等待在途查询和设置确认。已减少重复查询，但偶发无响应仍会触发超时恢复，不能保证固定的点击到新读数时延。
+
+“保持”只冻结主界面显示，不让仪表进入 HOLD，也不停止其内部 REC。
+
+### 容差比较
+
+1. 在常规测量中设好主参数、频率、电平等条件，接入参考元件并等待稳定。
+2. 点击顶部“容差比较”，确认以当前值取基准。
+3. 在“容差设置”中选择容差档位，再更换待测元件查看偏差。
+
+偏差百分比和基准均由仪表提供。面板将偏差绝对值与已确认档位比较：**小于或等于限值为“容差内”，超过为“超出容差”**。这只是原生偏差的界面判断，不重新计算偏差，不比较副参数，不将未确认的仪表结果码解释为 PASS/FAIL。保持、无效或未就绪时不显示合格结论。
+
+比较期间锁定主参数、副参数、频率和电平，串并联及容差档位仍可调。本台 E 已确认远程电平设置可能使原生偏差停止更新，因此应先退出比较再改测量条件。重新取基准只在容差设置内操作并要求确认，程序不会为恢复通信自动覆盖基准。
+
+第三行依次为 **刷新 / 容差设置 / 保持**。详见 [TOL 说明](docs/TOLERANCE.md)。
+
+### 统计记录
+
+打开“统计记录”并开始 REC，默认进入“当前值”；检测到仪表已开启 REC 时会自动打开统计界面。当前值显示主、副参数；最大、平均、最小只显示已验证可读取的主参数统计。
+
+选择统计项或点击“更新读回”会发送一次原生命令。该命令在本台仪表上会切换统计显示并提示音，所以统计快照不在后台循环刷新。关闭窗口不等于停止记录，需使用停止操作退出 REC。
+
+当前值的连续 FETCH 路径仅对已实测的 E / VER4.5.2307 启用；其他型号、固件采用保守的手动读回。统计准确性仍需用稳定元件对照，开路测试仅证明通信和显示行为。详见 [REC 通信与交互](docs/REC_TIMING.md)。
+
+## 打印外壳
+
+[enclosure/](enclosure/) 保存 **R9 主壳与两个独立 G20 按钮**，包括可编辑 CAD、打印网格、切片工程、参数及检查证据。
+
+| 用途 | 文件 |
+| --- | --- |
+| 编辑完整装配，含开发板参考 | [R9_G20_editable_with_reference.f3d](enclosure/cad/R9_G20_editable_with_reference.f3d) |
+| 打开完整三件套打印工程 | [R9_complete_shell_and_buttons.3mf](enclosure/print/R9_complete_shell_and_buttons.3mf) |
+| 独立零件 F3D / STEP / 模型坐标 STL | [cad/](enclosure/cad/) |
+| 已摆好打印方向的 STL | [print/stl/](enclosure/print/stl/) |
+| 机器、耗材、工艺配置 | [print/profiles/](enclosure/print/profiles/) |
+| 文件大小与 SHA256 清单 | [manifest.json](enclosure/manifest.json) |
+
+现有 3MF 面向 **Bambu Lab P1S、0.4 mm 喷嘴、普通 PETG、0.20 mm 层高、4 层墙**，包含已切片刀路。一盘一主壳加两个按钮，预计 82 分钟、31.91 g；这是切片估计。换打印机、材料或喷嘴后应重新核对配置和切片。
+
+主壳与按钮均无 Brim，按钮无支撑，主壳按钮孔/导轨区域无支撑。按钮帽面朝下；模型坐标 STL 与打印方向 STL 分开放置，直接打印优先使用完整 3MF。
+
+R9 主壳沿用已确认几何，按钮连接处增加腹板。名义侧缝每侧仅 0.10 mm，偏按检查存在壳体接触，**实物装配、回弹和不卡滞仍需验证**。归档没有确认最终打印完成，不把 CAD 检查等同于实物验收。详细尺寸、继承关系及记录见 [外壳说明](enclosure/README.txt)。
+
+## 构建、测试与烧录
+
+### 固件构建
+
+需要 **ESP-IDF 5.4.4** 及 ESP32-S3 工具链。LVGL 固定为 **8.4.0**，直接依赖见 [main/idf_component.yml](main/idf_component.yml)，完整版本和哈希见 [dependencies.lock](dependencies.lock)。
+
+在仓库根目录执行：
 
 ```sh
 . /path/to/esp-idf-v5.4.4/export.sh
 idf.py build
+```
+
+首次构建需取得锁定的组件依赖。仓库保留 `sdkconfig`、`sdkconfig.defaults` 和已生成的中文字体，普通固件构建不需要重新生成字体。输出为 `build/th2822_panel.bin`、ELF、bootloader 和分区表。
+
+### 主机与界面验证
+
+```sh
 cmake -S tests -B build-host
 cmake --build build-host
 ctest --test-dir build-host --output-on-failure
 python3 scripts/check_locales.py
 ```
 
-直接依赖固定在`main/idf_component.yml`，完整依赖版本与哈希在`dependencies.lock`。16MB flash、8MB octal PSRAM的本次配置保存在`sdkconfig`及`sdkconfig.defaults`。
-
-原生UI测试预览仅在主机测试目标，固定输入均明确标记，不编入固件：
+真实 LVGL 桌面预览需要 SDL2、pkg-config，以及固件构建已取得的 LVGL 组件：
 
 ```sh
 cmake -S tests/ui_preview -B build-preview
-cmake --build build-preview -j 8
-./build-preview/panel_preview --capture docs/screenshots/v0.3-zh zh-CN
+cmake --build build-preview
+./build-preview/panel_preview --capture docs/screenshots/current-zh zh-CN
+./build-preview/panel_preview --capture docs/screenshots/current-en en
 ```
 
-默认横屏0°；menuconfig的TH2822 panel选项提供180°完整帧翻转与触摸映射，该方向尚待实屏验收。未实现90°/270°布局。
+测试覆盖协议解析、调度、型号能力、原生 TOL/REC 及界面交互。预览使用明确标注的测试输入，不代表仪表实测，也不编入生产固件。
 
-UART115200诊断：`state`、`locale zh-CN`、`locale en`，及临时显示诊断`pclk 12/16/21`。没有模拟指令或任意仪表命令入口。
+### 烧录与交付
 
-## 交付与证据
+通过 **UART Type-C** 烧录，先确认对应串口并备份将覆盖的 Flash 范围。首次安装和保留现有分区的应用升级不同，按 [构建与烧录说明](docs/BUILD_FLASH.md) 操作，不执行整片擦除。
 
-- `release/0.3.7/`: Preserve native TOL on level/equivalent changes.
-- `release/0.3.6/`: TOL reference invalidation fix.
-- `release/0.3.5/`：原生TOL固件及构建输入，实机状态见VALIDATION。
-- `release/0.4.9/`：当前源码ZIP、应用BIN/ELF、配置、锁文件与SHA256SUMS；构建、刷写与实测边界见验收记录。
-- [构建、烧录与原板备份](docs/BUILD_FLASH.md)
-- [系列能力与待测矩阵](docs/SUPPORT.md)
-- [验收记录](docs/VALIDATION.md)
-- [语言资源与字体](docs/I18N.md)
-- [进展历史](docs/PROGRESS.md)
-- [第三方许可](THIRD_PARTY_NOTICES.md)
+构建后可生成本地固件发布包：
 
-`core/`为协议/能力/接收/统计核心，`main/`为板级、USB、队列及LVGL界面；`tests/fixtures/`与`tests/ui_preview/`仅用于主机测试。历史备份、旧版本产物及原始资料保留，均不编入当前固件。
+```sh
+python3 scripts/package_release.py
+```
 
-原生 REC、刷新档位、设置提速与红蓝通信指示详见 [REC_TIMING.md](docs/REC_TIMING.md)。
+当前输出目录为 `release/0.4.9/`，包含固件源码 ZIP、BIN/ELF、配置、依赖锁与校验和。该脚本打包固件；外壳文件直接保存在 Git 的 `enclosure/`。发布目录、构建目录、原始串口日志和板卡备份不提交 Git，克隆仓库后需自行构建。
+
+## 项目结构
+
+```text
+core/          协议解析、型号能力、会话调度、TOL/REC、语言和通信记录
+main/          板级初始化、USB Host、工作队列、LVGL 界面
+resources/     中英文语言资源
+fonts/         生成的字体子集、来源与许可
+tests/         主机测试、仪表测试夹具、真实 LVGL 桌面预览
+scripts/       字体生成、语言检查、诊断和固件打包
+docs/          硬件、协议、验证证据及开发记录
+enclosure/     R9 外壳 CAD、打印工程、网格和检查记录
+```
+
+## 已知限制与参考资料
+
+- 尚无确认可用的原生 AUTO 开关/状态或 FAST/SLOW 远程命令，界面不提供这些控制。仪表 AUTO 开启时可能将手动设置的主参数切回。
+- TOL 与 REC 使用仪表原生功能，不提供本地统计替代算法或副参数容差比较。
+- 不提供自动开路/短路校准、永久设置、恢复出厂、Wi-Fi 或 OTA。原生 USB 用于仪表通信，当前不启用 CAN 和 SD。
+- 稳定显示时序已实屏调整；其他板型、仪表型号和固件版本需要单独验证。
+
+更多资料：[硬件与接线](docs/HARDWARE.md) · [型号证据](docs/SUPPORT.md) · [实机验收](docs/VALIDATION.md) · [语言与字体](docs/I18N.md) · [开发记录](docs/PROGRESS.md)。
+
+协议行为参考 [LHX369963/th2822d-cli](https://github.com/LHX369963/th2822d-cli)，板级初始化依据微雪官方示例。第三方代码、组件、字体和资料的来源及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；这些许可不自动覆盖本仓库全部内容。

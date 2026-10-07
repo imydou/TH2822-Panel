@@ -1,0 +1,132 @@
+{
+  "status": "built_pending_validation",
+  "stages": [
+    "built button 1",
+    "built button 2"
+  ],
+  "errors": [],
+  "buttons": [
+    {
+      "button": 1,
+      "sections": [
+        {
+          "y_mm": 31.9,
+          "R8_central_section_mm2": 1.5599909712632902,
+          "R9_central_section_mm2": 2.730007838433357
+        },
+        {
+          "y_mm": 32,
+          "R8_central_section_mm2": 2.416902199645829,
+          "R9_central_section_mm2": 5.459999999987278
+        },
+        {
+          "y_mm": 32.3,
+          "R8_central_section_mm2": 3.2956973792555666,
+          "R9_central_section_mm2": 5.459999999987278
+        },
+        {
+          "y_mm": 32.39,
+          "R8_central_section_mm2": 2.960071707125146,
+          "R9_central_section_mm2": 5.459999999987278
+        },
+        {
+          "y_mm": 32.41,
+          "R8_central_section_mm2": 4.653994131308152,
+          "R9_central_section_mm2": 5.459999999987278
+        },
+        {
+          "y_mm": 32.6,
+          "R8_central_section_mm2": 4.653994131308152,
+          "R9_central_section_mm2": 5.459999999987278
+        },
+        {
+          "y_mm": 33,
+          "R8_central_section_mm2": 4.653994131308152,
+          "R9_central_section_mm2": 5.459999999987278
+        },
+        {
+          "y_mm": 33.4,
+          "R8_central_section_mm2": 4.653994131308152,
+          "R9_central_section_mm2": 5.459999999987278
+        }
+      ],
+      "added_volume_mm3": 4.16039808216373,
+      "features_healthy": true,
+      "added_bounds": [
+        [
+          -9.9958590479,
+          31.9,
+          -8.100000000000001
+        ],
+        [
+          -2.9958590479000002,
+          34.6,
+          -2.8000000000000003
+        ]
+      ],
+      "tip_and_working_rails_unchanged": true
+    },
+    {
+      "button": 2,
+      "sections": [
+        {
+          "y_mm": 31.9,
+          "R8_central_section_mm2": 2.4425266252486986,
+          "R9_central_section_mm2": 5.460000000007609
+        },
+        {
+          "y_mm": 32,
+          "R8_central_section_mm2": 2.860436322950225,
+          "R9_central_section_mm2": 5.4599999999872715
+        },
+        {
+          "y_mm": 32.3,
+          "R8_central_section_mm2": 3.4037232378107736,
+          "R9_central_section_mm2": 5.4599999999872715
+        },
+        {
+          "y_mm": 32.39,
+          "R8_central_section_mm2": 3.0599937322038153,
+          "R9_central_section_mm2": 5.4599999999872715
+        },
+        {
+          "y_mm": 32.41,
+          "R8_central_section_mm2": 4.653999999989149,
+          "R9_central_section_mm2": 5.4599999999872715
+        },
+        {
+          "y_mm": 32.6,
+          "R8_central_section_mm2": 4.65399999998915,
+          "R9_central_section_mm2": 5.4599999999872715
+        },
+        {
+          "y_mm": 33,
+          "R8_central_section_mm2": 4.65399999998915,
+          "R9_central_section_mm2": 5.4599999999872715
+        },
+        {
+          "y_mm": 33.4,
+          "R8_central_section_mm2": 4.65399999998915,
+          "R9_central_section_mm2": 5.4599999999872715
+        }
+      ],
+      "added_volume_mm3": 4.050290738160614,
+      "features_healthy": true,
+      "added_bounds": [
+        [
+          1.2205410986,
+          31.9,
+          -7.71
+        ],
+        [
+          8.2205410986,
+          34.6,
+          -2.8
+        ]
+      ],
+      "tip_and_working_rails_unchanged": true
+    }
+  ],
+  "shell_volume_before_mm3": 25851.892606186462,
+  "shell_volume_after_mm3": 25851.892606186462
+}

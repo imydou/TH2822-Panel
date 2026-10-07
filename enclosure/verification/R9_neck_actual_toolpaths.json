@@ -1,0 +1,513 @@
+{
+  "R9_G20_button_1_RIGHT_TF_FACE_DOWN.stl": {
+    "1.2": [
+      {
+        "x_local": -0.3126,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.3091,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7369,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7366,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2436,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2555,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "1.4": [
+      {
+        "x_local": -0.2847,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.2941,
+        "width": 0.5395,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7364,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7368,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2565,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2207,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "1.6": [
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.736,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2205,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "1.8": [
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7492,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2205,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.0": [
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7492,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2205,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.2": [
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7492,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2282,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.4": [
+      {
+        "x_local": 0.2472,
+        "width": 0.53732,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2468,
+        "width": 0.53732,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.6982,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.6978,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.0902,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.0898,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.6": [
+      {
+        "x_local": 1.0902,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.0898,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": 0.5824,
+        "width": 0.42,
+        "role": "Top surface"
+      },
+      {
+        "x_local": 0.0502,
+        "width": 0.42,
+        "role": "Top surface"
+      },
+      {
+        "x_local": -0.4828,
+        "width": 0.42,
+        "role": "Top surface"
+      }
+    ]
+  },
+  "R9_G20_button_2_LEFT_USB_FACE_DOWN.stl": {
+    "1.2": [
+      {
+        "x_local": -0.3126,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.3092,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7369,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7366,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2437,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2555,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "1.4": [
+      {
+        "x_local": -0.2847,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.2942,
+        "width": 0.5395,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7364,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7369,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2566,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2207,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "1.6": [
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7361,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2205,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "1.8": [
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7492,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2205,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.0": [
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7492,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2205,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.2": [
+      {
+        "x_local": 0.2922,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2924,
+        "width": 0.5422,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.7492,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.7334,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.2572,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.2282,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.4": [
+      {
+        "x_local": 0.2472,
+        "width": 0.53732,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2468,
+        "width": 0.53732,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.6982,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.6978,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.0902,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.0898,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ],
+    "2.6": [
+      {
+        "x_local": 0.2472,
+        "width": 0.53732,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.2468,
+        "width": 0.53732,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 0.6982,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": -0.6978,
+        "width": 0.44999,
+        "role": "Inner wall"
+      },
+      {
+        "x_local": 1.0902,
+        "width": 0.41999,
+        "role": "Outer wall"
+      },
+      {
+        "x_local": -1.0898,
+        "width": 0.41999,
+        "role": "Outer wall"
+      }
+    ]
+  }
+}

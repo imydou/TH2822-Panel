@@ -32,15 +32,15 @@ DCR仅D/E启用，并禁用频率、电平、等效电路、副参数设置及IM
 - 查询前的主动测量帧按类型分流，不能混作身份/设置响应。每次响应最多1800ms/32行；同一无副作用query最多一次重试，重试前建立有限静默。setter不重放，失败不盲目回滚。
 - RX1024字节、单行191字节、UI队列8项。超长、非法字节、溢出、错误字段、NaN/Inf等使数据无效并显示错误。
 - AC三个字段，DCR两个字段；比较字段接受手册NR1有符号整数与参考D固件的N。产品不提供Auto Fetch模式；不猜其他扩展。
-- HOLD/MIN/MAX/AVG为本地主参数统计，无效值不计入。无全系列同等吞吐率或固件时序保证。
+- 当前保持仅冻结面板主界面；MIN/MAX/AVG 使用仪表原生 REC 按需读回，不计算本地统计。原生当前值的连续 FETCH 路径仅在实测 E / VER4.5.2307 启用，其他型号/固件采用保守手动读回。无全系列同等吞吐率或固件时序保证。
 
 ## 第三方实测参考的边界
 
 [th2822d-cli](https://github.com/LHX369963/th2822d-cli)，MIT，提交e935bd9895c4bb0e667308bae22126edd549e199。已审阅README/LICENSE/protocol/catalog/validation/transport-firmware，未运行其连机脚本。
 
-其TH2822D VER4.5.2307、CP2102 10c4:ea60记录仅属于该项目。800ms setter等待仅匹配该D身份；其他型号/固件使用1200ms保守初值，仍待实测。SLOW丢指令、DTR/HUPCL、副参数重置不能视为全系实测。嵌入式保持USB串口打开，没有POSIX HUPCL。
+其TH2822D VER4.5.2307、CP2102 10c4:ea60记录仅属于该项目。800ms setter等待仅匹配该D身份；当前项目实测 E / VER4.5.2307 使用100ms后首次读回，可能因仪表未响应进入后续等待。其他型号/固件使用1200ms保守初值，仍待实测。SLOW丢指令、DTR/HUPCL、副参数重置不能视为全系实测。嵌入式保持USB串口打开，没有POSIX HUPCL。
 
-E10/E11/E12显示在仪表LCD，不虚构SYST:ERR?等错误队列。正式固件不执行仪表RATE、AUTO LCR、OPEN/SHORT、校准、上电记忆、恢复出厂、容差或内部REC操作。
+E10/E11/E12显示在仪表LCD，不虚构SYST:ERR?等错误队列。当前正式固件提供用户触发的原生 TOL 和 REC 操作；不执行仪表 RATE、AUTO LCR、OPEN/SHORT、校准、上电记忆或恢复出厂。TOL 取基准需显式确认，统计选择查询具有显示切换及提示音副作用，见 TOLERANCE.md 和 REC_TIMING.md。
 
 ## 原生AUTO LCR调查（2026-10-07）
 

@@ -1,0 +1,61 @@
+{
+  "project": "R9_complete_shell_and_buttons.3mf",
+  "bytes": 409866,
+  "sha256": "16b44fb77f1b2c6c03d627a1cc1798c81bc050fd7e39e2c0af41993163dabc07",
+  "library_file_id": "libfile_476688f5ec388191a1de3a4bacc69adf",
+  "file_id": "file_00000000761882099465ec701e62a305",
+  "library_version": 1,
+  "no_brim_in_config_and_actual_gcode": true,
+  "delivery_gcode_exactly_equals_reviewed_cli_gcode": true,
+  "printable_meshes": {
+    "R9_G20_button_1_RIGHT_TF_FACE_DOWN.stl": {
+      "triangles": 244,
+      "closed_edges": true,
+      "connected_components": 1,
+      "signed_volume_mm3": 118.14918250379897,
+      "bounds": [
+        [
+          -3.89999,
+          -0.0,
+          0.0
+        ],
+        [
+          3.90002,
+          7.3,
+          8.8
+        ]
+      ]
+    },
+    "R9_G20_button_2_LEFT_USB_FACE_DOWN.stl": {
+      "triangles": 216,
+      "closed_edges": true,
+      "connected_components": 1,
+      "signed_volume_mm3": 118.97859251268706,
+      "bounds": [
+        [
+          -3.89999,
+          -0.0,
+          0.0
+        ],
+        [
+          3.90001,
+          7.3,
+          8.8
+        ]
+      ]
+    }
+  },
+  "nominal_motion_clear_poses": 18,
+  "board_insertion_clear_poses": 94,
+  "rigid_insertion_latch_excluded_poses": 402,
+  "tilt_test_poses": 288,
+  "tilt_shell_contact_poses": 168,
+  "tilt_fixed_frame_or_pcb_contacts": 0,
+  "physical_validated": false,
+  "print_status": "sent_once_cloud_upload_seen_62_percent_then_Mac_locked_receipt_unconfirmed",
+  "A2_mapping_verified_in_send_dialog": true,
+  "printer": "3DP-01P-738 Bambu Lab P1S 0.4mm",
+  "bed_empty_camera_verified_before_submission": true,
+  "last_read_attempt_utc": "2026-10-04T20:14Z",
+  "do_not_resubmit_until_actual_device_status_checked": true
+}
